@@ -1,0 +1,3 @@
+This is a demo application for a fake Freight Broker company. The backend is implemented three times using Python (FastAPI), C# (.NET), and Java (Spring Boot), while the front-end is built with ReactJS and TypeScript.
+
+The front-end allows users to toggle between the three backends and observe real-time performance metrics, including response times, request throughput, and error rates. A dedicated meta-view dashboard provides insights into backend efficiency, helping compare how each technology handles API requests under varying loads.

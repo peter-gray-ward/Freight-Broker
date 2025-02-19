@@ -1,0 +1,31 @@
+Backend API code will be implement three times with three separate technologies:
+
+	1. Python (FastAPI)
+	2. C# (.NET)
+	3. Java (Spring Boot)
+
+There will be four business need categories:
+
+	1. Freighters: Posting schedules, updating availability.
+	2. Clients: Posting shipment requests, viewing matches.
+	3. Matching System: Finding the best shipping options.
+	4. Orders: Placing and tracking shipments.
+
+There will be four API endpoint categories:
+
+Users
+	POST /users/register
+	POST /users/login
+
+Freighter Schedules
+	POST /freighters/schedules
+	GET /freighters/schedules
+	PUT /freighters/schedules/{id}
+
+Shipment Requests
+	POST /shipments/requests
+	GET /shipments/matches/{request_id}
+
+Orders
+	POST /orders
+	GET /orders/{order_id}
