@@ -1,0 +1,1 @@
+python -m uvicorn index:app --reload
