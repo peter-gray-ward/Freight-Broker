@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Response
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, Security
 from contextlib import asynccontextmanager
 import bcrypt
 import jwt
@@ -6,14 +6,20 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 import json
 import asyncio
+from typing import Annotated
 
-from models import UserRegister, FreightSchedule, ShipmentRequest, Order
-from security import create_jwt_token, verify_token, verify_role, hash_password
+from models import User, UserRegister, FreightSchedule, ShipmentRequest, Order
+from security import create_jwt_token, verify_token, verify_role, hash_password, verify_admin
 from startup import connect_db, load_stored_procedures
 from data.simulation import setup_users, move_freighters, generate_shipments
+from fastapi.middleware.cors import CORSMiddleware
+
 
 
 print('Python Backend API for "Freight Broker" application')
+
+active_connections = set()
+active_users = set()
 
 
 @asynccontextmanager
@@ -28,6 +34,51 @@ async def lifespan(app: FastAPI):
 	yield
 
 app = FastAPI(lifespan=lifespan)
+
+origins = [
+    "http://localhost:3000",  # Next.js local development
+    "https://your-production-domain.com",  # Add your deployed frontend domain
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Allow specific frontend domains
+    allow_credentials=True,  # Allow cookies & authentication
+    allow_methods=["*"],  # Allow all HTTP methods (GET, POST, PUT, DELETE, etc.)
+    allow_headers=["*"],  # Allow all headers
+)
+
+@app.websocket("/ws")  # ✅ Use raw WebSocket (not `/socket.io`)
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.add(websocket)
+    print("Client connected!")
+
+    try:
+        while True:
+            data = await websocket.receive_text()
+            print(f"Received: {data}")
+
+            message = json.loads(json)
+
+
+            for connection in active_connections:
+                await connection.send_text(json.dumps(message))
+
+    except WebSocketDisconnect:
+        print("Client disconnected!")
+        active_connections.remove(websocket)
+
+async def alert_user_connect(user):
+    print("alert user connect ---- ", user)
+    active_users.add(user)
+
+    message = json.dumps({ "type": "user_connect", "payload": user.dict() })
+    for connection in active_connections:
+        try:
+            await connection.send_text(message)
+        except Exception as e:
+            print(f"Failed to send message {e}")
 
 @app.post("/users/register")
 async def register(request: Request, response: Response):
@@ -96,24 +147,34 @@ async def login(request: Request, response: Response):
     await conn.close()
 
     print('user ' + name + ' has LOGGED IN', user_data)
+    
 
-    return {
+    connected_user = {
         "userid": str(user_data["userid"]),
         "name": user_data["name"],
         "email": user_data["email"],
         "role": user_data["role"]
     }
 
-@app.get("/secure-data-test", dependencies=[Depends(verify_token)])
-async def security_test():
-	return {"message": "Access granted to secure data"}
+    await alert_user_connect(User(**connected_user))
 
+    return connected_user
+
+@app.get("/secure-data-test")
+async def security_test(request: Request):
+    user = verify_role(request, "Admin")
+    return {"message": "Access granted to secure data"}
+
+@app.get("/active-users")
+def get_active_users(request: Request):
+    user = verify_role(request, "Admin")
+    return active_users
 
 # ==============================
 # ✅ Freighter Schedules
 # ==============================
 
-@app.post("/freighters/schedules", dependencies=[Depends(verify_role("Freighter"))])
+@app.post("/freighters/schedules")
 async def post_freighter_schedule(request: Request):
     body = await request.json()
     conn = await connect_db()
@@ -128,14 +189,14 @@ async def post_freighter_schedule(request: Request):
     await conn.close()
     return new_schedule[0]
 
-@app.get("/freighters/schedules", dependencies=[Depends(verify_token)])
+@app.get("/freighters/schedules")
 async def get_freighter_schedules():
     conn = await connect_db()
     schedules = await conn.fetch("SELECT * FROM get_all_freighter_schedules()")
     await conn.close()
     return schedules
 
-@app.put("/freighters/schedules/{id}", dependencies=[Depends(verify_role("Freighter"))])
+@app.put("/freighters/schedules/{id}")
 async def update_freighter_schedule(id: str, request: Request):
     body = await request.json()
     conn = await connect_db()
@@ -154,7 +215,7 @@ async def update_freighter_schedule(id: str, request: Request):
 # ✅ Shipment Requests
 # ==============================
 
-@app.post("/shipments/requests", dependencies=[Depends(verify_role("Client"))])
+@app.post("/shipments/requests")
 async def post_shipment_request(request: Request):
     body = await request.json()
     conn = await connect_db()
@@ -168,7 +229,7 @@ async def post_shipment_request(request: Request):
     await conn.close()
     return new_request[0]
 
-@app.get("/shipments/matches/{request_id}", dependencies=[Depends(verify_role("Client"))])
+@app.get("/shipments/matches/{request_id}")
 async def get_shipment_matches(request_id: str):
     conn = await connect_db()
     matches = await conn.fetch("SELECT * FROM get_shipment_matches($1)", request_id)
@@ -179,7 +240,7 @@ async def get_shipment_matches(request_id: str):
 # ✅ Orders
 # ==============================
 
-@app.post("/orders", dependencies=[Depends(verify_role("Client"))])
+@app.post("/orders")
 async def place_order(request: Request):
     body = await request.json()
     conn = await connect_db()
@@ -192,7 +253,7 @@ async def place_order(request: Request):
     await conn.close()
     return new_order[0]
 
-@app.get("/orders/{order_id}", dependencies=[Depends(verify_role("Client"))])
+@app.get("/orders/{order_id}")
 async def get_order(order_id: str):
     conn = await connect_db()
     order = await conn.fetch("SELECT * FROM get_order($1)", order_id)

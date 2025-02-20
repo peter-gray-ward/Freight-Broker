@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  height: 100vh;
+  margin: 0;
+}
+
+h2 {
+  margin: 0 !important;
+  width: 100%;
+  background: white;
+}
+
+.datatable {
+}
+
+#dashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+#dashboard, #top, #bottom {
+  display: flex;
+}
+
+#language-stats, #shipments, #users, #schedules {
+  display: flex;
+  flex-direction: column;
+
+  h2, h3, h4 {
+    height: 2rem;
+    width: 100%;
+    text-indent: 0.5rem;
+  }
+
+  > section {
+    flex-grow: 1;
+  }
+}
+
+#map {
+  height: 100%;
+}
+
+#language-stats {
+  h2 {
+    background: lawngreen;
+    color: white;
+  }
+} 
+
+#shipments {
+  h2 {
+    background: royalblue;
+    color: white;
+  }
+} 
+
+#schedules {
+  h2 {
+    background: orange;
+    color: white;
+  }
+}
+
+#users {
+  overflow: auto;
+
+  font-size: 0.5rem;
+
+  h2 {
+    background: red;
+    color: white;
+  }
+}

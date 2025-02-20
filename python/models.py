@@ -8,6 +8,21 @@ class UserRegister(BaseModel):
     password: str
     role: str  # "Client" or "Freighter"
 
+
+class User(BaseModel):
+    userid: str
+    name: str
+    email: str
+    role: str
+
+    def __hash__(self):
+        return hash(self.userid)
+
+    def __eq__(self, other):
+        if isinstance(other, User):
+            return self.userid == other.userid
+        return False
+
 class FreightSchedule(BaseModel):
     freighter_id: str
     departure_city: str

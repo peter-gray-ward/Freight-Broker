@@ -4,8 +4,8 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 import os
 import json
-from fastapi import Depends, HTTPException, Request, Response
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, Request, Response, Security
+from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "env.json"))
 
@@ -22,11 +22,18 @@ def create_jwt_token(data: dict, expires_delta: timedelta):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, secret, algorithm=algorithm)
 
-def verify_token(request: Request, token: str = Depends(oauth2_scheme)):
-    jwt_token = request.cookies.get("access_token")
+def verify_token(request: Request):
+    jwt_token = request.cookies.get("fb_access_token")
+
+    print("VERIFY TOKEN ", jwt_token)
 
     if not jwt_token:
-        jwt_token = token
+	    auth_header = request.headers.get("Authorization")
+
+	    if not auth_header or not auth_header.startswith("Bearer "):
+	        raise HTTPException(status_code=401, detail="Invalid or missing Authorization header")
+
+	    jwt_token = auth_header.split("Bearer ")[1]
 
     if not jwt_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -39,12 +46,23 @@ def verify_token(request: Request, token: str = Depends(oauth2_scheme)):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-def verify_role(required_role: str):
-	def role_checker(payload: dict = Depends(verify_token)):
-		if payload.get("role") != required_role:
-			raise HTTPException(status_code=403, detail="Not enough permissions")
-		return payload
-	return role_checker
+def verify_role(request: Request, required_role: str):
+	payload = verify_token(request)
+
+	print("\n VERIFY ROLE: ", payload)
+	print("\n")
+
+	if payload.get("role") != required_role:
+		raise HTTPException(status_code=403, detail="Not enough permissions")
+
+	return payload
+
+def verify_admin(security_scopes: SecurityScopes, payload: dict = Depends(verify_token)):
+    print("\n VERIFY ROLE: ", payload)
+    print("\n")
+    if payload.get("role") != required_role:
+        raise HTTPException(status_code=403, detail="Not enough permissions")
+    return payload
 
 def hash_password(password: str) -> str:
     salt = bcrypt.gensalt()
