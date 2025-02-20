@@ -21,17 +21,24 @@ print('Python Backend API for "Freight Broker" application')
 active_connections = set()
 active_users = set()
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-	await load_stored_procedures()
+    await load_stored_procedures()
 
-	# simulation
-	asyncio.create_task(manage_sessions())
-	# asyncio.create_task(move_freighters())
-	# asyncio.create_taslk(generate_shipments())
+    # Start the session management task (runs forever)
+    loop = asyncio.get_event_loop()
+    loop.create_task(manage_sessions())
 
-	yield
+    yield  # FastAPI continues running while this task runs in the background
+
+    # Ensure the background task gets cancelled when shutting down
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        print("🔴 manage_sessions() task cancelled on shutdown.")
+
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -52,12 +59,12 @@ app.add_middleware(
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.add(websocket)
-    print("Client connected!")
+    # print("Client connected!")
 
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"Received: {data}")
+            # print(f"Received: {data}")
 
             message = json.loads(json)
 
@@ -66,11 +73,11 @@ async def websocket_endpoint(websocket: WebSocket):
                 await connection.send_text(json.dumps(message))
 
     except WebSocketDisconnect:
-        print("Client disconnected!")
+        # print("Client disconnected!")
         active_connections.remove(websocket)
 
 async def alert_user_connect(user, which):
-    print("alert user connect ---- ", user)
+    # print("alert user connect ---- ", user)
     if which == 'login':
         active_users.add(user)
     else:
@@ -169,7 +176,7 @@ async def login(request: Request, response: Response):
 async def logout(request: Request):
     user = verify_token(request)
 
-    print('/users/logout', user)
+    # print('/users/logout', user)
 
     await alert_user_connect(User(**user), 'logout')
 

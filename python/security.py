@@ -33,7 +33,7 @@ def verify_token(request: Request):
 
 	    jwt_token = auth_header.split("Bearer ")[1]
 
-    print("VERIFY TOKEN ", jwt_token)
+    # print("VERIFY TOKEN ", jwt_token)
 
     if not jwt_token:
         raise HTTPException(status_code=401, detail="Not authenticated")
@@ -49,8 +49,8 @@ def verify_token(request: Request):
 def verify_role(request: Request, required_role: str):
 	payload = verify_token(request)
 
-	print("\n VERIFY ROLE: ", payload)
-	print("\n")
+	# print("\n VERIFY ROLE: ", payload)
+	# print("\n")
 
 	if payload.get("role") != required_role:
 		raise HTTPException(status_code=403, detail="Not enough permissions")
@@ -58,8 +58,8 @@ def verify_role(request: Request, required_role: str):
 	return payload
 
 def verify_admin(security_scopes: SecurityScopes, payload: dict = Depends(verify_token)):
-    print("\n VERIFY ROLE: ", payload)
-    print("\n")
+    # print("\n VERIFY ROLE: ", payload)
+    # print("\n")
     if payload.get("role") != required_role:
         raise HTTPException(status_code=403, detail="Not enough permissions")
     return payload

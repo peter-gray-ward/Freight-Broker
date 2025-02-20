@@ -3,6 +3,8 @@ import random
 import aiohttp
 from datetime import datetime, timedelta
 
+day_length = 3
+
 # Backend API URL
 BASE_URL = "http://localhost:8000"
 
@@ -17,14 +19,13 @@ CITIES = [
 # 20 Freighters
 FREIGHTERS = [
     {
-        "id": f"freighter-{i+1}",
+        "userid": f"freighter-{i+1}",
         "name": f"Freighter {i+1}",
         "email": f"freighter{i+1}@test.com",
         "password": "securepass123",
         "max_load_kg": random.randint(10000, 50000),
         "available_kg": random.randint(5000, 25000),
-        "current_city": random.choice(CITIES),
-        "user_id": None,  
+        "current_city": random.choice(CITIES) 
     }
     for i in range(20)
 ]
@@ -32,17 +33,16 @@ FREIGHTERS = [
 # 11 Suppliers (Clients)
 SUPPLIERS = [
     {
-        "id": f"supplier-{i+1}",
+        "userid": f"supplier-{i+1}",
         "name": f"Supplier {i+1}",
         "email": f"supplier{i+1}@test.com",
-        "password": "securepass123",
-        "user_id": None,  
+        "password": "securepass123"
     }
     for i in range(11)
 ]
 
 # Track active user sessions
-ACTIVE_SESSIONS = {}  # {user_id: expiration_time}
+ACTIVE_SESSIONS = {}  # {userid: expiration_time}
 
 
 async def get_access_token(session, email, password, name, role):
@@ -76,13 +76,13 @@ async def setup_users():
     async with aiohttp.ClientSession() as session:
         # Register freighters
         for freighter in FREIGHTERS:
-            freighter["user_id"], freighter["name"], freighter["email"], freighter["role"] = await get_access_token(
+            freighter["userid"], freighter["name"], freighter["email"], freighter["role"] = await get_access_token(
                 session, freighter["email"], freighter["password"], freighter["name"], "Freighter"
             )
 
         # Register suppliers
         for supplier in SUPPLIERS:
-            supplier["user_id"], supplier["name"], supplier["email"], supplier["role"] = await get_access_token(
+            supplier["userid"], supplier["name"], supplier["email"], supplier["role"] = await get_access_token(
                 session, supplier["email"], supplier["password"], supplier["name"], "Client"
             )
 
@@ -95,39 +95,57 @@ async def handle_user_session(user):
     - Waits for 10 seconds (active session).
     - Logs out the user.
     """
-    await asyncio.sleep(random.randint(1, 60))  # Random start time in the day
+    await asyncio.sleep(random.randint(1, day_length))  # Random start time in the day
 
     async with aiohttp.ClientSession() as session:
         # Log in user
         async with session.post(f"{BASE_URL}/users/login", json={"name": user["name"], "password": user["password"]}) as resp:
             if resp.status == 200:
                 data = await resp.json()
-                print(f"🔓 {user['name']} logged in.", resp.cookies.get("fb_access_token").value)
-                ACTIVE_SESSIONS[user["user_id"]] = resp.cookies.get("fb_access_token").value
+
+                ACTIVE_SESSIONS[user["userid"]] = resp.cookies.get("fb_access_token").value
 
                 # Stay logged in for 10s
-                await asyncio.sleep(10)
+                await asyncio.sleep(day_length / 6)
 
                 # Log out user
-                headers = {"Authorization": f"Bearer {ACTIVE_SESSIONS[user["user_id"]]}"}
+                headers = {"Authorization": f"Bearer {ACTIVE_SESSIONS[user["userid"]]}"}
 
-                print(".... logging out", headers)
+                # print(".... logging out", headers)
                 async with session.post(f"{BASE_URL}/users/logout", headers=headers) as logout_resp:
                     if logout_resp.status == 200:
-                        print(f"🔒 {user['name']} logged out.")
-                        del ACTIVE_SESSIONS[user["user_id"]]
+                        # print(f"🔒 {user['name']} logged out.")
+                        if user["userid"] in ACTIVE_SESSIONS:
+                            del ACTIVE_SESSIONS[user["userid"]]
                     else:
                         print(f"⚠️ Logout failed for {user['name']}: {await logout_resp.text()}")
 
-async def manage_sessions():
-    while True:
-        """
-        Spawns a separate coroutine for each user, ensuring they log in and out only once per day.
-        """
-        tasks = [asyncio.create_task(handle_user_session(user)) for user in FREIGHTERS + SUPPLIERS]
-        await asyncio.gather(*tasks)  # Wait for all user session tasks to complete
 
-        await asyncio.sleep(60)
+import traceback
+
+async def manage_sessions():
+    """
+    Keeps running indefinitely. Ensures users log in and out once per cycle.
+    Recovers from errors without stopping.
+    """
+    day = 1
+    while True:
+        try:
+            print(f"\n⏳ Day {day} starting...")
+
+            # Start login/logout tasks for all users
+            tasks = [asyncio.create_task(handle_user_session(user)) for user in FREIGHTERS + SUPPLIERS]
+            await asyncio.gather(*tasks)  # Wait for all users to log in/out
+
+            print(f"\n🔄 Day {day} complete. Waiting for next cycle...\n")
+            day += 1
+
+        except Exception as e:
+            print(f"❌ ERROR in manage_sessions() on Day {day}: {e}")
+            traceback.print_exc()
+
+        await asyncio.sleep(1)  # Simulate next "day" cycle
+
 
 
 async def move_freighters():
@@ -137,7 +155,7 @@ async def move_freighters():
     """
     while True:
         for freighter in FREIGHTERS:
-            if freighter["user_id"] not in ACTIVE_SESSIONS:
+            if freighter["userid"] not in ACTIVE_SESSIONS:
                 continue  
 
             new_city = random.choice([city for city in CITIES if city != freighter["current_city"]])
@@ -155,7 +173,7 @@ async def generate_shipments():
     async with aiohttp.ClientSession() as session:
         while True:
             for supplier in SUPPLIERS:
-                if supplier["user_id"] not in ACTIVE_SESSIONS:
+                if supplier["userid"] not in ACTIVE_SESSIONS:
                     continue  
 
                 origin_city = random.choice(CITIES)
@@ -165,7 +183,7 @@ async def generate_shipments():
                 print(f"📦 {supplier['name']} shipping {weight_kg}kg {origin_city} → {destination_city}")
 
                 shipment_data = {
-                    "client_id": supplier["user_id"],
+                    "client_id": supplier["userid"],
                     "origin_city": origin_city,
                     "origin_lat": random.uniform(30.0, 50.0),
                     "origin_lng": random.uniform(-120.0, -70.0),
