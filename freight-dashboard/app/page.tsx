@@ -12,14 +12,14 @@ const FreighterMap = dynamic(() => import("./components/FreighterMap"));
 
 export default function Dashboard() {
   const { data: user, isLoading, error } = useLogin();
-  const { freighterUpdates, shipmentUpdates, sendMessage } = useWebSocket();
-  const { data: activeUsers } = useLoadActiveUsers();
+  const { activeUsers, freighterUpdates, shipmentUpdates, sendMessage } = useWebSocket();
+  const { data: activeUsersInitial } = useLoadActiveUsers();
 
   if (isLoading) return <p>🔄 Logging in...</p>;
   if (error) return <p>❌ Failed to log in: {error.message}</p>;
 
-  
-  console.log(activeUsers)
+  let au = activeUsers.length ? activeUsers : activeUsersInitial;
+  au = au.map(u => ({ name: u.name, role: u.role }))
 
   return (
     <main id="dashboard" className="p-6 w-full">
@@ -34,7 +34,7 @@ export default function Dashboard() {
 
         <section id="users" className="w-1/5 h-full">
           <h2 className="text-xl font-semibold mt-4">😊 Active Users</h2>
-          {DataTable(activeUsers.map(u => ({ name: u.name, role: u.role })))}
+          {DataTable(au)}
         </section>
       </div>
 

@@ -25,8 +25,6 @@ def create_jwt_token(data: dict, expires_delta: timedelta):
 def verify_token(request: Request):
     jwt_token = request.cookies.get("fb_access_token")
 
-    print("VERIFY TOKEN ", jwt_token)
-
     if not jwt_token:
 	    auth_header = request.headers.get("Authorization")
 
@@ -34,6 +32,8 @@ def verify_token(request: Request):
 	        raise HTTPException(status_code=401, detail="Invalid or missing Authorization header")
 
 	    jwt_token = auth_header.split("Bearer ")[1]
+
+    print("VERIFY TOKEN ", jwt_token)
 
     if not jwt_token:
         raise HTTPException(status_code=401, detail="Not authenticated")

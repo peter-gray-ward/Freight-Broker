@@ -11,7 +11,7 @@ from typing import Annotated
 from models import User, UserRegister, FreightSchedule, ShipmentRequest, Order
 from security import create_jwt_token, verify_token, verify_role, hash_password, verify_admin
 from startup import connect_db, load_stored_procedures
-from data.simulation import setup_users, move_freighters, generate_shipments
+from data.simulation import setup_users, move_freighters, generate_shipments, manage_sessions
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 	await load_stored_procedures()
 
 	# simulation
-	asyncio.create_task(setup_users())
+	asyncio.create_task(manage_sessions())
 	# asyncio.create_task(move_freighters())
 	# asyncio.create_taslk(generate_shipments())
 
@@ -69,11 +69,14 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Client disconnected!")
         active_connections.remove(websocket)
 
-async def alert_user_connect(user):
+async def alert_user_connect(user, which):
     print("alert user connect ---- ", user)
-    active_users.add(user)
+    if which == 'login':
+        active_users.add(user)
+    else:
+        active_users.remove(user)
 
-    message = json.dumps({ "type": "user_connect", "payload": user.dict() })
+    message = json.dumps({ "type": "user_" + which, "payload": user.dict() })
     for connection in active_connections:
         try:
             await connection.send_text(message)
@@ -146,7 +149,6 @@ async def login(request: Request, response: Response):
 
     await conn.close()
 
-    print('user ' + name + ' has LOGGED IN', user_data)
     
 
     connected_user = {
@@ -156,9 +158,20 @@ async def login(request: Request, response: Response):
         "role": user_data["role"]
     }
 
-    await alert_user_connect(User(**connected_user))
+    user = User(**connected_user)
+
+    if user not in active_users:
+        await alert_user_connect(user, 'login')
 
     return connected_user
+
+@app.post("/users/logout")
+async def logout(request: Request):
+    user = verify_token(request)
+
+    print('/users/logout', user)
+
+    await alert_user_connect(User(**user), 'logout')
 
 @app.get("/secure-data-test")
 async def security_test(request: Request):

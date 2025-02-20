@@ -11,6 +11,7 @@ export function useWebSocket() {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [freighterUpdates, setFreighterUpdates] = useState<any[]>([]);
   const [shipmentUpdates, setShipmentUpdates] = useState<any[]>([]);
+  const [activeUsers, setActiveUsers] = useState<any[]>([]);
 
   useEffect(() => {
     const ws = new WebSocket(SOCKET_URL);
@@ -22,6 +23,12 @@ export function useWebSocket() {
       console.log("WebSocket Received:", message);
 
       switch (message.type) {
+        case "user_login":
+          setActiveUsers((prev) => [...prev, message.payload])
+          break;
+        case "user_logout":
+          setActiveUsers((prev) => prev.filter(u => u.userid !== message.payload.userid))
+          break;
         case "freighter_update":
           setFreighterUpdates((prev) => [...prev, message.payload]);
           break;
@@ -45,5 +52,5 @@ export function useWebSocket() {
     }
   };
 
-  return { freighterUpdates, shipmentUpdates, sendMessage };
+  return { activeUsers, freighterUpdates, shipmentUpdates, sendMessage };
 }

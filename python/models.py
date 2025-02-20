@@ -12,7 +12,6 @@ class UserRegister(BaseModel):
 class User(BaseModel):
     userid: str
     name: str
-    email: str
     role: str
 
     def __hash__(self):
