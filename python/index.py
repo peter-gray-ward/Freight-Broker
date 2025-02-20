@@ -1,110 +1,33 @@
 from fastapi import FastAPI, Depends, HTTPException, Request, Response
-from fastapi.security import OAuth2PasswordBearer
 from contextlib import asynccontextmanager
 import bcrypt
 import jwt
 from uuid import uuid4
 from datetime import datetime, timedelta
-from models import UserRegister, FreightSchedule, ShipmentRequest, Order
-import asyncpg
 import json
 import asyncio
-import os
+
+from models import UserRegister, FreightSchedule, ShipmentRequest, Order
+from security import create_jwt_token, verify_token, verify_role, hash_password
+from startup import connect_db, load_stored_procedures
+from data.simulation import setup_users, move_freighters, generate_shipments
+
 
 print('Python Backend API for "Freight Broker" application')
 
 
-env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "env.json"))
-schemas_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "schemas.sql"))
-stored_procedure_directory = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "stored-procedures"))
-with open(env_path, 'r') as file:
-	env = json.load(file)
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-secret = env["jwt"]["secret"]
-algorithm = env["jwt"]["algorithm"]
-
-
-
-async def connect_db():
-    return await asyncpg.connect(
-        user=env["db"]["username"],
-        port=env["db"]["port"],
-        password=env["db"]["password"],
-        database=env["db"]["database"],
-        host=env["db"]["host"]
-    )
-
-async def load_stored_procedures():
-    conn = await connect_db()
-
-    with open(schemas_path, 'r', encoding="utf-8") as schemas_sql:
-    	try:
-    		await conn.execute(schemas_sql.read().strip())
-    		print(f"Executed: {schemas_path}")
-    	except Exception as e:
-    		print(f"Error processing schemas.sql")
-    
-    for file_name in os.listdir(stored_procedure_directory):
-        file_path = os.path.join(stored_procedure_directory, file_name)
-
-        if file_name.endswith(".sql"):
-            with open(file_path, 'r', encoding="utf-8") as sql_file:
-                sql_content = sql_file.read().strip()
-                try:
-                    await conn.execute(sql_content)
-                    print(f"Executed: {file_name}")
-                except Exception as e:
-                    print(f"Error executing {file_name}: {e}")
-
-    await conn.close()
-
-def create_jwt_token(data: dict, expires_delta: timedelta):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + expires_delta
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, secret, algorithm=algorithm)
-
-
-def verify_token(request: Request, token: str = Depends(oauth2_scheme)):
-    jwt_token = request.cookies.get("access_token")
-
-    if not jwt_token:
-        jwt_token = token
-
-    if not jwt_token:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-
-    try:
-        payload = jwt.decode(jwt_token, secret, algorithms=[algorithm])
-        return payload  # ✅ Valid token, return payload (user data)
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-def verify_role(required_role: str):
-	def role_checker(payload: dict = Depends(verify_token)):
-		if payload.get("role") != required_role:
-			raise HTTPException(status_code=403, detail="Not enough permissions")
-		return payload
-	return role_checker
-
-def hash_password(password: str) -> str:
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode(), salt)
-    return hashed.decode()
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await load_stored_procedures()
-    yield
+	await load_stored_procedures()
+
+	# simulation
+	asyncio.create_task(setup_users())
+	# asyncio.create_task(move_freighters())
+	# asyncio.create_taslk(generate_shipments())
+
+	yield
 
 app = FastAPI(lifespan=lifespan)
-
-
-
-
 
 @app.post("/users/register")
 async def register(request: Request, response: Response):
@@ -181,9 +104,97 @@ async def login(request: Request, response: Response):
         "role": user_data["role"]
     }
 
-
-
 @app.get("/secure-data-test", dependencies=[Depends(verify_token)])
 async def security_test():
 	return {"message": "Access granted to secure data"}
 
+
+# ==============================
+# ✅ Freighter Schedules
+# ==============================
+
+@app.post("/freighters/schedules", dependencies=[Depends(verify_role("Freighter"))])
+async def post_freighter_schedule(request: Request):
+    body = await request.json()
+    conn = await connect_db()
+
+    new_schedule = await conn.fetch(
+        "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        body["freighter_id"], body["departure_city"], body["departure_lat"], body["departure_lon"],
+        body["arrival_city"], body["arrival_lat"], body["arrival_lon"],
+        body["departure_date"], body["arrival_date"]
+    )
+
+    await conn.close()
+    return new_schedule[0]
+
+@app.get("/freighters/schedules", dependencies=[Depends(verify_token)])
+async def get_freighter_schedules():
+    conn = await connect_db()
+    schedules = await conn.fetch("SELECT * FROM get_all_freighter_schedules()")
+    await conn.close()
+    return schedules
+
+@app.put("/freighters/schedules/{id}", dependencies=[Depends(verify_role("Freighter"))])
+async def update_freighter_schedule(id: str, request: Request):
+    body = await request.json()
+    conn = await connect_db()
+
+    updated_schedule = await conn.fetch(
+        "SELECT * FROM update_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        id, body["freighter_id"], body["departure_city"], body["departure_lat"], body["departure_lon"],
+        body["arrival_city"], body["arrival_lat"], body["arrival_lon"],
+        body["departure_date"], body["arrival_date"]
+    )
+
+    await conn.close()
+    return updated_schedule[0]
+
+# ==============================
+# ✅ Shipment Requests
+# ==============================
+
+@app.post("/shipments/requests", dependencies=[Depends(verify_role("Client"))])
+async def post_shipment_request(request: Request):
+    body = await request.json()
+    conn = await connect_db()
+
+    new_request = await conn.fetch(
+        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7)",
+        body["client_id"], body["origin_city"], body["origin_lat"], body["origin_lon"],
+        body["destination_city"], body["destination_lat"], body["destination_lon"]
+    )
+
+    await conn.close()
+    return new_request[0]
+
+@app.get("/shipments/matches/{request_id}", dependencies=[Depends(verify_role("Client"))])
+async def get_shipment_matches(request_id: str):
+    conn = await connect_db()
+    matches = await conn.fetch("SELECT * FROM get_shipment_matches($1)", request_id)
+    await conn.close()
+    return matches
+
+# ==============================
+# ✅ Orders
+# ==============================
+
+@app.post("/orders", dependencies=[Depends(verify_role("Client"))])
+async def place_order(request: Request):
+    body = await request.json()
+    conn = await connect_db()
+
+    new_order = await conn.fetch(
+        "SELECT * FROM insert_order($1, $2, $3, $4)",
+        body["client_id"], body["shipment_request_id"], body["freighter_schedule_id"], body["status"]
+    )
+
+    await conn.close()
+    return new_order[0]
+
+@app.get("/orders/{order_id}", dependencies=[Depends(verify_role("Client"))])
+async def get_order(order_id: str):
+    conn = await connect_db()
+    order = await conn.fetch("SELECT * FROM get_order($1)", order_id)
+    await conn.close()
+    return order[0] if order else None
