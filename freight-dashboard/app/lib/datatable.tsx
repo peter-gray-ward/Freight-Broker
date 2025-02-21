@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 
 export default function DataTable(objects) {
+  if (!objects) return null
   if (!Array.isArray(objects)) {
   	objects = Object.values(objects);
   }
+  console.log("DataTable", objects)
   var keys = Object.keys(objects[0])
   return (
     <div className="datatable overflow-x-auto">

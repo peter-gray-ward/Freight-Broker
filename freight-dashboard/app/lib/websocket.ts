@@ -33,7 +33,7 @@ export function useWebSocket() {
           setFreighterUpdates((prev) => [...prev, message.payload]);
           break;
         case "shipment_update":
-          setShipmentUpdates((prev) => [...prev, message.payload]);
+          setShipmentUpdates((prev) => message.payload);
           break;
         default:
           console.warn("Unknown WebSocket message type:", message.type);

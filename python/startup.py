@@ -23,8 +23,9 @@ async def load_stored_procedures():
 
     with open(schemas_path, 'r', encoding="utf-8") as schemas_sql:
     	try:
-    		await conn.execute(schemas_sql.read().strip())
-    		print(f"Executed: {schemas_path}")
+            await conn.execute("DELETE FROM shipmentrequests WHERE 1 = 1")
+            await conn.execute(schemas_sql.read().strip())
+            print(f"Executed: {schemas_path}")
     	except Exception as e:
     		print(f"Error processing schemas.sql")
     

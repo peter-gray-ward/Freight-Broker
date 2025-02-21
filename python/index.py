@@ -11,7 +11,7 @@ from typing import Annotated
 from models import User, UserRegister, FreightSchedule, ShipmentRequest, Order
 from security import create_jwt_token, verify_token, verify_role, hash_password, verify_admin
 from startup import connect_db, load_stored_procedures
-from data.simulation import setup_users, move_freighters, generate_shipments, manage_sessions
+from data.simulation import manage_sessions
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -30,13 +30,6 @@ async def lifespan(app: FastAPI):
     loop.create_task(manage_sessions())
 
     yield  # FastAPI continues running while this task runs in the background
-
-    # Ensure the background task gets cancelled when shutting down
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        print("🔴 manage_sessions() task cancelled on shutdown.")
 
 
 
@@ -84,6 +77,15 @@ async def alert_user_connect(user, which):
         active_users.remove(user)
 
     message = json.dumps({ "type": "user_" + which, "payload": user.dict() })
+    for connection in active_connections:
+        try:
+            await connection.send_text(message)
+        except Exception as e:
+            print(f"Failed to send message {e}")
+
+async def alert_shipment(shipments):
+    shipments = list(map(lambda s: s.dict(), shipments))
+    message = json.dumps({ "type": "shipment_update", "payload": shipments })
     for connection in active_connections:
         try:
             await connection.send_text(message)
@@ -235,18 +237,51 @@ async def update_freighter_schedule(id: str, request: Request):
 # ✅ Shipment Requests
 # ==============================
 
+@app.get("/shipments/requests")
+async def get_shipment_request(request: Request):
+    conn = await connect_db()
+
+    requests = await conn.fetch("""SELECT * FROM shipmentrequests""")
+
+    await conn.close()
+    return requests
+
 @app.post("/shipments/requests")
 async def post_shipment_request(request: Request):
     body = await request.json()
     conn = await connect_db()
 
     new_request = await conn.fetch(
-        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7)",
-        body["client_id"], body["origin_city"], body["origin_lat"], body["origin_lon"],
-        body["destination_city"], body["destination_lat"], body["destination_lon"]
+        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        body["clientid"], body["origincity"], body["originlat"], body["originlng"],
+        body["destinationcity"], body["destinationlat"], body["destinationlng"],
+        body["weightkg"], body["specialhandling"]
     )
 
+    requests = await conn.fetch("""SELECT * FROM shipmentrequests""")
+
     await conn.close()
+
+
+    await alert_shipment([
+        ShipmentRequest(**{
+            "requestid": str(s["requestid"]),  # Ensure correct field names
+            "clientid": str(s["clientid"]),  # Ensure client_id is correctly mapped
+            "origincity": s["origincity"],
+            "originlat": s["originlat"],
+            "originlng": s["originlng"],
+            "destinationcity": s["destinationcity"],
+            "destinationlat": s["destinationlat"],
+            "destinationlng": s["destinationlng"],
+            "weightkg": s["weightkg"],
+            "specialhandling": "none",  # Optional field
+            "status": s["status"],
+            "createdat": str(s["createdat"]),
+            "lastupdated": str(s["lastupdated"]),
+        }) for s in requests
+    ])
+
+
     return new_request[0]
 
 @app.get("/shipments/matches/{request_id}")

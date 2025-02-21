@@ -9,25 +9,25 @@ CREATE OR REPLACE FUNCTION insert_shipment_request(
     p_weight_kg DECIMAL(10,2),
     p_special_handling VARCHAR
 ) RETURNS TABLE (
-    request_id UUID,
-    client_id UUID,
-    origin_city VARCHAR,
-    origin_lat DECIMAL(9,6),
-    origin_lng DECIMAL(9,6),
-    destination_city VARCHAR,
-    destination_lat DECIMAL(9,6),
-    destination_lng DECIMAL(9,6),
-    weight_kg DECIMAL(10,2),
-    special_handling VARCHAR,
+    requestid UUID,
+    clientid UUID,
+    origincity VARCHAR,
+    originlat DECIMAL(9,6),
+    originlng DECIMAL(9,6),
+    destinationcity VARCHAR,
+    destinationlat DECIMAL(9,6),
+    destinationlng DECIMAL(9,6),
+    weightkg DECIMAL(10,2),
+    specialhandling VARCHAR,
     status VARCHAR,
-    created_at TIMESTAMP,
-    last_updated TIMESTAMP
+    createdat TIMESTAMP,
+    lastupdated TIMESTAMP
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY 
-    INSERT INTO public."ShipmentRequests" (
+    INSERT INTO public."shipmentrequests" (
         ClientID, OriginCity, OriginLat, OriginLng, DestinationCity, DestinationLat, DestinationLng, WeightKg, SpecialHandling, Status
     ) VALUES (
         p_client_id, p_origin_city, p_origin_lat, p_origin_lng, 
@@ -35,7 +35,7 @@ BEGIN
         p_weight_kg, p_special_handling, 'Pending'
     )
     RETURNING 
-        RequestID, ClientID, OriginCity, OriginLat, OriginLng, DestinationCity, DestinationLat, DestinationLng, 
-        WeightKg, SpecialHandling, Status, CreatedAt, LastUpdated;
+        shipmentrequests.RequestID, shipmentrequests.ClientID, shipmentrequests.OriginCity, shipmentrequests.OriginLat, shipmentrequests.OriginLng, shipmentrequests.DestinationCity, shipmentrequests.DestinationLat, shipmentrequests.DestinationLng, shipmentrequests.
+        WeightKg, shipmentrequests.SpecialHandling, shipmentrequests.Status, shipmentrequests.CreatedAt, shipmentrequests.LastUpdated;
 END;
 $$;

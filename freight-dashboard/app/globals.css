@@ -44,6 +44,10 @@ h2 {
 #language-stats, #shipments, #users, #schedules {
   display: flex;
   flex-direction: column;
+  
+  overflow: auto;
+
+  font-size: 0.5rem;
 
   h2, h3, h4 {
     height: 2rem;
@@ -82,9 +86,6 @@ h2 {
 }
 
 #users {
-  overflow: auto;
-
-  font-size: 0.5rem;
 
   h2 {
     background: red;

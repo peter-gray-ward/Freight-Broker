@@ -50,8 +50,7 @@ export function useShipments() {
     queryFn: async () => {
       const res = await fetch(`${API_URL}/shipments/requests`);
       return res.json();
-    },
-    refetchInterval: 5000, // Poll every 5 seconds
+    }
   });
 }
 

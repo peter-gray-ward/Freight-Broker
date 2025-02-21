@@ -37,16 +37,27 @@ class FreightSchedule(BaseModel):
     status: str = "Available"
 
 class ShipmentRequest(BaseModel):
-    client_id: str
-    origin_city: str
-    origin_lat: float
-    origin_lon: float
-    destination_city: str
-    destination_lat: float
-    destination_lon: float
-    weight_kg: float
-    special_handling: Optional[str]
+    requestid: str
+    clientid: str
+    origincity: str
+    originlat: float
+    originlng: float
+    destinationcity: str
+    destinationlat: float
+    destinationlng: float
+    weightkg: float
+    specialhandling: str
     status: str = "Pending"
+    createdat: str
+    lastupdated: str
+
+    def __hash__(self):
+        return hash(self.requestid)
+
+    def __eq__(self, other):
+        if isinstance(other, ShipmentRequest):
+            return self.requestid == other.requestid
+        return False
 
 class Order(BaseModel):
     match_id: str

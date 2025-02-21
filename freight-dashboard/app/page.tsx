@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useLogin, useLoadActiveUsers} from "./lib/api";
+import { useLogin, useLoadActiveUsers, useShipments } from "./lib/api";
 
 import { useWebSocket } from './lib/websocket';
 
@@ -14,12 +14,15 @@ export default function Dashboard() {
   const { data: user, isLoading, error } = useLogin();
   const { activeUsers, freighterUpdates, shipmentUpdates, sendMessage } = useWebSocket();
   const { data: activeUsersInitial } = useLoadActiveUsers();
+  const { data: shipments } = useShipments()
 
   if (isLoading) return <p>🔄 Logging in...</p>;
   if (error) return <p>❌ Failed to log in: {error.message}</p>;
 
   let au = activeUsers.length ? activeUsers : activeUsersInitial;
   au = au.map(u => ({ name: u.name, role: u.role }))
+
+  let su = shipmentUpdates.length ? shipmentUpdates : shipments;
 
   return (
     <main id="dashboard" className="p-6 w-full">
@@ -44,8 +47,8 @@ export default function Dashboard() {
           todo
         </section>
         <section id="shipments" className="h-full w-1/2">
-          <h2 className="w-1/2 text-xl font-semibold mt-4">📦 Shipments</h2>
-          todo
+          <h2 className="w-1/2 text-xl font-semibold mt-4">📦 Shipments ({su ? su.length : 0})</h2>
+          {DataTable(su)}
         </section>
       </div>
     </main>
