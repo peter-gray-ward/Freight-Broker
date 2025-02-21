@@ -2,6 +2,7 @@ import asyncio
 import random
 import aiohttp
 from datetime import datetime, timedelta
+from uuid import uuid4
 
 day_length = 10
 
@@ -16,19 +17,51 @@ CITIES = [
     "Charlotte", "San Francisco", "Seattle", "Denver", "Washington"
 ]
 
-# 20 Freighters
+def random_location():
+    return round(random.uniform(30.0, 50.0), 6), round(random.uniform(-120.0, -70.0), 6)
+
+# Generate random schedules for freighters
 FREIGHTERS = [
     {
-        "userid": f"freighter-{i+1}",
+        "userid": str(uuid4()),  # Unique Freighter ID
+        "freighterid": str(uuid4()),
         "name": f"Freighter {i+1}",
         "email": f"freighter{i+1}@test.com",
         "password": "securepass123",
-        "max_load_kg": random.randint(10000, 50000),
-        "available_kg": random.randint(5000, 25000),
-        "current_city": random.choice(CITIES) 
+        "maxloadkg": random.randint(10000, 50000),
+        "availablekg": random.randint(5000, 25000),
+        "departurecity": random.choice(CITIES),
+        "arrivalcity": random.choice(CITIES),
+        "departurelat": None,  # Assigned later
+        "departurelng": None,
+        "arrivallat": None,
+        "arrivallng": None,
+        "departuredate": None,
+        "arrivaldate": None,
+        "scheduleid": str(uuid4()),  # Unique schedule ID
+        "status": "Available",  # Can be: Available, In Transit, Completed
+        "lastupdated": str(datetime.utcnow()),
+        "role": "Freighter"
     }
     for i in range(20)
 ]
+
+# Ensure departure and arrival locations are different
+for freighter in FREIGHTERS:
+    while freighter["arrivalcity"] == freighter["departurecity"]:
+        freighter["arrivalcity"] = random.choice(CITIES)
+
+    # Assign lat/lon
+    freighter["departurelat"], freighter["departurelng"] = random_location()
+    freighter["arrivallat"], freighter["arrivallng"] = random_location()
+
+    # Assign departure and arrival times (randomly within next 24 hours)
+    departuretime = datetime.utcnow() + timedelta(hours=random.randint(1, 12))
+    arrivaltime = departuretime + timedelta(hours=random.randint(5, 15))
+    
+    freighter["departuredate"] = str(departuretime)
+    freighter["arrivaldate"] = str(arrivaltime)
+
 
 # 11 Suppliers (Clients)
 SUPPLIERS = [
@@ -36,7 +69,8 @@ SUPPLIERS = [
         "userid": f"supplier-{i+1}",
         "name": f"Supplier {i+1}",
         "email": f"supplier{i+1}@test.com",
-        "password": "securepass123"
+        "password": "securepass123",
+        "role": "Supplier"
     }
     for i in range(11)
 ]
@@ -104,8 +138,10 @@ async def handle_user_session(user):
                 print(f"🔓 {user['name']} logged in.", data)
                 ACTIVE_SESSIONS[user["userid"]] = resp.cookies.get("fb_access_token").value
 
-                if data['role'] == 'Client':
+                if data['role'] == 'Supplier':
                     await generate_shipment(data)
+                elif data['role'] == 'Freighter':
+                    await update_freighter_schedule(data)
 
                 # Stay logged in for 10s
                 await asyncio.sleep(10)
@@ -126,6 +162,13 @@ async def handle_user_session(user):
 
                     if attempt < 2:  # Only wait before retrying if not the last attempt
                         await asyncio.sleep(3)  # Wait before retrying
+            else:
+                async with session.post(f"{BASE_URL}/users/register", json={
+                    "name": user["name"], "email": user["email"], "password": user["password"], "role": user["role"]
+                }) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        print(f"🔓 {user['name']} registered.", data)
 
 
 
@@ -141,11 +184,11 @@ async def manage_sessions():
     while True:
         try:
             print(f"\n⏳ Day {day} starting...")
-
-            await move_freighters()
+            users = FREIGHTERS + SUPPLIERS
+            random.shuffle(users)
 
             # Start login/logout tasks for all users
-            tasks = [asyncio.create_task(handle_user_session(user)) for user in FREIGHTERS + SUPPLIERS]
+            tasks = [asyncio.create_task(handle_user_session(user)) for user in users]
             await asyncio.gather(*tasks)  # Wait for all users to log in/out
 
 
@@ -159,21 +202,7 @@ async def manage_sessions():
         await asyncio.sleep(1)  # Simulate next "day" cycle
 
 
-
-async def move_freighters():
-    for freighter in FREIGHTERS:
-        new_city = random.choice([city for city in CITIES if city != freighter["current_city"]])
-        print(f"🚚 {freighter['name']} moving: {freighter['current_city']} → {new_city}")
-        freighter["current_city"] = new_city
-
-
-
 async def generate_shipment(supplier):
-    """
-    Simulates suppliers generating shipment requests.
-    Only active users can generate shipments.
-    """
-
     origin_city = random.choice(CITIES)
     destination_city = random.choice([city for city in CITIES if city != origin_city])
     weight_kg = random.randint(500, 5000)
@@ -195,8 +224,22 @@ async def generate_shipment(supplier):
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE_URL}/shipments/requests", json=shipment_data) as resp:
             if resp.status == 200:
-                print(f"✅ Shipment created: {supplier['name']}")
+                print(f"📦 Shipment created: {supplier['name']}")
             else:
                 print(f"❌ Failed shipment {supplier['name']}: {await resp.text()}")
 
 
+async def update_freighter_schedule(user):
+    freighter = None
+    for f in FREIGHTERS:
+        if f["name"] == user["name"]:
+            freighter = f
+    if freighter:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{BASE_URL}/freighters/schedules", json=freighter) as resp:
+                if resp.status == 200:
+                    print(f"🕒 Schedule Updated: {freighter['name']}")
+                else:
+                    print(f"❌ Failed schedule update {freighter['name']}: {await resp.text()}")
+    else:
+        print(user, FREIGHTERS)

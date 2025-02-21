@@ -54,13 +54,12 @@ export function useShipments() {
   });
 }
 
-export function useOrders() {
+export function useSchedules() {
   return useQuery({
-    queryKey: ["orders"],
+    queryKey: ["schedules"],
     queryFn: async () => {
-      const res = await fetch(`${API_URL}/orders`);
+      const res = await fetch(`${API_URL}/freighters/schedules`);
       return res.json();
-    },
-    refetchInterval: 5000,
+    }
   });
 }

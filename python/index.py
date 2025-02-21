@@ -92,6 +92,15 @@ async def alert_shipment(shipments):
         except Exception as e:
             print(f"Failed to send message {e}")
 
+async def alert_schedule(schedules):
+    schedules = list(map(lambda s: s.dict(), schedules))
+    message = json.dumps({ "type": "freighter_update", "payload": schedules })
+    for connection in active_connections:
+        try:
+            await connection.send_text(message)
+        except Exception as e:
+            print(f"Failed to send message {e}")
+
 @app.post("/users/register")
 async def register(request: Request, response: Response):
 	body = await request.json()
@@ -202,13 +211,36 @@ async def post_freighter_schedule(request: Request):
     conn = await connect_db()
 
     new_schedule = await conn.fetch(
-        "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-        body["freighter_id"], body["departure_city"], body["departure_lat"], body["departure_lon"],
-        body["arrival_city"], body["arrival_lat"], body["arrival_lon"],
-        body["departure_date"], body["arrival_date"]
+        "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+        body["freighterid"], body["departurecity"], body["departurelat"], body["departurelng"],
+        body["arrivalcity"], body["arrivallat"], body["arrivallng"],
+        datetime.strptime(body["departuredate"], "%Y-%m-%d %H:%M:%S.%f"), datetime.strptime(body["arrivaldate"], "%Y-%m-%d %H:%M:%S.%f"), body["maxloadkg"], body["availablekg"], body["status"]
     )
 
+    schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
+
+    print(schedules)
+
     await conn.close()
+
+    await alert_schedule([
+        FreightSchedule(**{
+            "scheduleid": str(s["scheduleid"]),
+            "freighterid": str(s["freighterid"]),
+            "departurecity": str(s["departurecity"]),
+            "departurelat": float(s["departurelat"]),
+            "departurelng": float(s["departurelng"]),
+            "arrivalcity": str(s["arrivalcity"]),
+            "arrivallat": float(s["arrivallat"]),
+            "arrivallng": float(s["arrivallng"]),
+            "departuredate": str(s["departuredate"]),
+            "arrivaldate": str(s["arrivaldate"]),
+            "maxloadkg": float(s["maxloadkg"]),
+            "availablekg": float(s["availablekg"]),
+            "status": str(s.get("status", "Available"))  # Default status to "Available"
+        }) for s in schedules
+    ])
+
     return new_schedule[0]
 
 @app.get("/freighters/schedules")
@@ -230,7 +262,30 @@ async def update_freighter_schedule(id: str, request: Request):
         body["departure_date"], body["arrival_date"]
     )
 
+    schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
+
     await conn.close()
+
+
+    await alert_schedule([
+        FreightSchedule(**{
+            "scheduleid": str(s["scheduleid"]),
+            "freighterid": str(s["freighterid"]),
+            "departurecity": str(s["departurecity"]),
+            "departurelat": float(s["departurelat"]),
+            "departurelng": float(s["departurelng"]),
+            "arrivalcity": str(s["arrivalcity"]),
+            "arrivallat": float(s["arrivallat"]),
+            "arrivallng": float(s["arrivallng"]),
+            "departuredate": str(s["departuredate"]),
+            "arrivaldate": str(s["arrivaldate"]),
+            "maxloadkg": float(s["maxloadkg"]),
+            "availablekg": float(s["availablekg"]),
+            "status": str(s.get("status", "Available"))  # Default status to "Available"
+        }) for s in schedules
+    ])
+
+
     return updated_schedule[0]
 
 # ==============================
@@ -291,26 +346,5 @@ async def get_shipment_matches(request_id: str):
     await conn.close()
     return matches
 
-# ==============================
-# ✅ Orders
-# ==============================
 
-@app.post("/orders")
-async def place_order(request: Request):
-    body = await request.json()
-    conn = await connect_db()
 
-    new_order = await conn.fetch(
-        "SELECT * FROM insert_order($1, $2, $3, $4)",
-        body["client_id"], body["shipment_request_id"], body["freighter_schedule_id"], body["status"]
-    )
-
-    await conn.close()
-    return new_order[0]
-
-@app.get("/orders/{order_id}")
-async def get_order(order_id: str):
-    conn = await connect_db()
-    order = await conn.fetch("SELECT * FROM get_order($1)", order_id)
-    await conn.close()
-    return order[0] if order else None

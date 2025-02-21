@@ -23,18 +23,27 @@ class User(BaseModel):
         return False
 
 class FreightSchedule(BaseModel):
-    freighter_id: str
-    departure_city: str
-    departure_lat: float
-    departure_lon: float
-    arrival_city: str
-    arrival_lat: float
-    arrival_lon: float
-    departure_date: datetime
-    arrival_date: datetime
-    max_load_kg: float
-    available_kg: float
+    scheduleid: str
+    freighterid: str
+    departurecity: str
+    departurelat: float
+    departurelng: float
+    arrivalcity: str
+    arrivallat: float
+    arrivallng: float
+    departuredate: str
+    arrivaldate: str
+    maxloadkg: float
+    availablekg: float
     status: str = "Available"
+
+    def __hash__(self):
+        return hash(self.scheduleid)
+
+    def __eq__(self, other):
+        if isinstance(other, FreightSchedule):
+            return self.scheduleid == other.scheduleid
+        return False
 
 class ShipmentRequest(BaseModel):
     requestid: str

@@ -7,7 +7,7 @@ export default function DataTable(objects) {
   if (!Array.isArray(objects)) {
   	objects = Object.values(objects);
   }
-  console.log("DataTable", objects)
+  if (!objects.length) return null
   var keys = Object.keys(objects[0])
   return (
     <div className="datatable overflow-x-auto">

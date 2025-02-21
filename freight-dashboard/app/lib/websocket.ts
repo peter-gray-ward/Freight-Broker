@@ -30,7 +30,7 @@ export function useWebSocket() {
           setActiveUsers((prev) => prev.filter(u => u.userid !== message.payload.userid))
           break;
         case "freighter_update":
-          setFreighterUpdates((prev) => [...prev, message.payload]);
+          setFreighterUpdates((prev) => message.payload);
           break;
         case "shipment_update":
           setShipmentUpdates((prev) => message.payload);

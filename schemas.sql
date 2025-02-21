@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS Users (
     Name          VARCHAR(255) NOT NULL,
     Email         VARCHAR(255) UNIQUE NOT NULL,
     PasswordHash  VARCHAR(255) NOT NULL,
-    Role          VARCHAR(20) CHECK (Role IN ('Client', 'Freighter', 'Admin')),
+    Role          VARCHAR(20) CHECK (Role IN ('Supplier', 'Freighter', 'Admin')),
     CreatedAt     TIMESTAMP DEFAULT NOW()
 );
 

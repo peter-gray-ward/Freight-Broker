@@ -12,27 +12,27 @@ CREATE OR REPLACE FUNCTION insert_freighter_schedule(
     p_available_kg DECIMAL(10,2),
     p_status VARCHAR
 ) RETURNS TABLE (
-    schedule_id UUID,
-    freighter_id UUID,
-    departure_city VARCHAR,
-    departure_lat DECIMAL(9,6),
-    departure_lng DECIMAL(9,6),
-    arrival_city VARCHAR,
-    arrival_lat DECIMAL(9,6),
-    arrival_lng DECIMAL(9,6),
-    departure_date TIMESTAMP,
-    arrival_date TIMESTAMP,
-    max_load_kg DECIMAL(10,2),
-    available_kg DECIMAL(10,2),
+    scheduleid UUID,
+    freighterid UUID,
+    departurecity VARCHAR,
+    departurelat DECIMAL(9,6),
+    departurelng DECIMAL(9,6),
+    arrivalcity VARCHAR,
+    arrivallat DECIMAL(9,6),
+    arrivallng DECIMAL(9,6),
+    departuredate TIMESTAMP,
+    arrivaldate TIMESTAMP,
+    maxloadkg DECIMAL(10,2),
+    availablekg DECIMAL(10,2),
     status VARCHAR,
-    created_at TIMESTAMP,
-    last_updated TIMESTAMP
+    createdat TIMESTAMP,
+    lastupdated TIMESTAMP
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY 
-    INSERT INTO public."FreighterSchedules" (
+    INSERT INTO public."freighterschedules" (
         FreighterID, DepartureCity, DepartureLat, DepartureLng, 
         ArrivalCity, ArrivalLat, ArrivalLng, 
         DepartureDate, ArrivalDate, 
@@ -44,9 +44,9 @@ BEGIN
         p_max_load_kg, p_available_kg, p_status
     )
     RETURNING 
-        ScheduleID, FreighterID, DepartureCity, DepartureLat, DepartureLng,
-        ArrivalCity, ArrivalLat, ArrivalLng, 
-        DepartureDate, ArrivalDate, 
-        MaxLoadKg, AvailableKg, Status, CreatedAt, LastUpdated;
+        freighterschedules.ScheduleID, freighterschedules.FreighterID, freighterschedules.DepartureCity, freighterschedules.DepartureLat, freighterschedules.DepartureLng,
+        freighterschedules.ArrivalCity, freighterschedules.ArrivalLat, freighterschedules.ArrivalLng,
+        freighterschedules.DepartureDate, freighterschedules.ArrivalDate, 
+        freighterschedules.MaxLoadKg, freighterschedules.AvailableKg, freighterschedules.Status, freighterschedules.CreatedAt, freighterschedules.LastUpdated;
 END;
 $$;
