@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request, Response, WebSocke
 from contextlib import asynccontextmanager
 import bcrypt
 import jwt
-from uuid import uuid4
+import uuid
 from datetime import datetime, timedelta
 import json
 import asyncio
@@ -70,7 +70,7 @@ async def websocket_endpoint(websocket: WebSocket):
         active_connections.remove(websocket)
 
 async def alert_user_connect(user, which):
-    # print("alert user connect ---- ", user)
+    print("alert user connect ---- ", which,  user)
     if which == 'login':
         active_users.add(user)
     else:
@@ -101,34 +101,75 @@ async def alert_schedule(schedules):
         except Exception as e:
             print(f"Failed to send message {e}")
 
+register_tokens = dict()
+
 @app.post("/users/register")
 async def register(request: Request, response: Response):
-	body = await request.json()
-	name = body["name"]
-	email = body["email"]
-	password = body["password"]
-	role = body.get("role", "Client")
+    body = await request.json()
+    userid = body.get("userid", None)
+    name = body["name"]
+    email = body["email"]
+    password = body["password"]
+    role = body.get("role", "Client")
 
-	conn = await connect_db()
-	
-	existing_user = await conn.fetch("SELECT * FROM get_user_by_name($1)", name)
+    conn = await connect_db()
 
-	if existing_user:
-		await conn.close()
-		raise HTTPException(status_code=500, detail=f"User {name} already exists")
+    existing_user = await conn.fetch("SELECT * FROM get_user_by_name($1)", name)
 
-	password_hash = hash_password(password)
+    if existing_user:
+        await conn.close()
+        raise HTTPException(status_code=500, detail=f"User {name} already exists")
 
-	new_user = await conn.fetch("SELECT * FROM insert_user($1, $2, $3, $4)", name, email, password_hash, role)
+    password_hash = hash_password(password)
 
-	await conn.close()
-	return {
-		"userid": new_user[0]["userid"], 
-		"name": new_user[0]["name"], 
-		"email": new_user[0]["email"], 
-		"role": new_user[0]["role"]
-	}
+    new_user = []
 
+    if userid:
+        new_user = await conn.fetch("SELECT * FROM insert_user_with_id($1, $2, $3, $4, $5)", uuid.UUID(userid), name, email, password_hash, role)
+    else:
+        new_user = await conn.fetch("SELECT userid, name, role, email FROM insert_user($1, $2, $3, $4)", name, email, password_hash, role)
+
+    if (len(new_user) < 1):
+        raise HTTPException(status_code=500, detail=f"Internal Server Error")
+
+    new_user = new_user[0]
+
+    uid = str(new_user["userid"])
+
+    access_token = create_jwt_token(
+        data={"userid": uid, "name": new_user["name"], "role": new_user["role"]},
+        expires_delta=timedelta(minutes=30)
+    )
+
+    register_tokens[uid] = access_token
+
+    response.set_cookie(
+        key="fb_access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="Lax",
+        max_age=30 * 60
+    )
+
+    await conn.close()
+
+    user = user = User(**{
+        "userid": str(new_user["userid"]),
+        "name": new_user["name"],
+        "email": new_user["email"],
+        "role": new_user["role"]
+    })
+
+    if user not in active_users:
+        await alert_user_connect(user, 'login')
+
+    return {
+        "userid": new_user["userid"], 
+        "name": new_user["name"], 
+        "email": new_user["email"], 
+        "role": new_user["role"]
+    }
 
 @app.post("/users/login")
 async def login(request: Request, response: Response):
@@ -151,8 +192,10 @@ async def login(request: Request, response: Response):
         await conn.close()
         raise HTTPException(status_code=401, detail="Invalid password")
 
-    access_token = create_jwt_token(
-        data={"userid": str(user_data["userid"]), "name": user_data["name"], "role": user_data["role"]},
+    uid = str(user_data["userid"])
+
+    access_token = register_tokens[uid] if uid in register_tokens else create_jwt_token(
+        data={"userid": uid, "name": user_data["name"], "role": user_data["role"]},
         expires_delta=timedelta(minutes=30)
     )
 
@@ -210,38 +253,56 @@ async def post_freighter_schedule(request: Request):
     body = await request.json()
     conn = await connect_db()
 
-    new_schedule = await conn.fetch(
-        "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
-        body["freighterid"], body["departurecity"], body["departurelat"], body["departurelng"],
-        body["arrivalcity"], body["arrivallat"], body["arrivallng"],
-        datetime.strptime(body["departuredate"], "%Y-%m-%d %H:%M:%S.%f"), datetime.strptime(body["arrivaldate"], "%Y-%m-%d %H:%M:%S.%f"), body["maxloadkg"], body["availablekg"], body["status"]
+    print(body)
+
+    departuredate = datetime.strptime(body["departuredate"], "%Y-%m-%d %H:%M:%S.%f") if body["departuredate"] else None
+    arrivaldate = datetime.strptime(body["arrivaldate"], "%Y-%m-%d %H:%M:%S.%f") if body["arrivaldate"] else None
+    freighterid = body["freighterid"]
+    departurelat = body["departurelat"]
+    departurelng = body["departurelng"]
+
+    current_departure = await conn.fetch(
+        """
+            SELECT departurelat, departurelng
+            FROM freighterschedules
+            WHERE freighterid = $1
+        """,
+        freighterid
     )
 
-    schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
+    if not current_departure or current_departure["departurelat"] != departurelat or current_departure["departurelng"] != departurelng:
 
-    print(schedules)
+        new_schedule = await conn.fetch(
+            "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            body["freighterid"], body["departurecity"], body["departurelat"], body["departurelng"],
+            body["arrivalcity"], body["arrivallat"], body["arrivallng"],
+            departuredate, arrivaldate, body["maxloadkg"], body["availablekg"], body["status"]
+        )
 
-    await conn.close()
+        schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
 
-    await alert_schedule([
-        FreightSchedule(**{
-            "scheduleid": str(s["scheduleid"]),
-            "freighterid": str(s["freighterid"]),
-            "departurecity": str(s["departurecity"]),
-            "departurelat": float(s["departurelat"]),
-            "departurelng": float(s["departurelng"]),
-            "arrivalcity": str(s["arrivalcity"]),
-            "arrivallat": float(s["arrivallat"]),
-            "arrivallng": float(s["arrivallng"]),
-            "departuredate": str(s["departuredate"]),
-            "arrivaldate": str(s["arrivaldate"]),
-            "maxloadkg": float(s["maxloadkg"]),
-            "availablekg": float(s["availablekg"]),
-            "status": str(s.get("status", "Available"))  # Default status to "Available"
-        }) for s in schedules
-    ])
+        await conn.close()
 
-    return new_schedule[0]
+        await alert_schedule([
+            FreightSchedule(**{
+                "scheduleid": str(s["scheduleid"]),
+                "freighterid": str(s["freighterid"]),
+                "departurecity": s["departurecity"],
+                "departurelat": s["departurelat"],
+                "departurelng": s["departurelng"],
+                "arrivalcity": s["arrivalcity"],
+                "arrivallat": s["arrivallat"],
+                "arrivallng": s["arrivallng"],
+                "departuredate": s["departuredate"],
+                "arrivaldate": s["arrivaldate"],
+                "maxloadkg": s["maxloadkg"],
+                "availablekg": s["availablekg"],
+                "status": s.get("status", "Available")  # Default status to "Available"
+            }) for s in schedules
+        ])
+
+        return new_schedule[0]
+    return None
 
 @app.get("/freighters/schedules")
 async def get_freighter_schedules():
@@ -249,44 +310,6 @@ async def get_freighter_schedules():
     schedules = await conn.fetch("SELECT * FROM get_all_freighter_schedules()")
     await conn.close()
     return schedules
-
-@app.put("/freighters/schedules/{id}")
-async def update_freighter_schedule(id: str, request: Request):
-    body = await request.json()
-    conn = await connect_db()
-
-    updated_schedule = await conn.fetch(
-        "SELECT * FROM update_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-        id, body["freighter_id"], body["departure_city"], body["departure_lat"], body["departure_lon"],
-        body["arrival_city"], body["arrival_lat"], body["arrival_lon"],
-        body["departure_date"], body["arrival_date"]
-    )
-
-    schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
-
-    await conn.close()
-
-
-    await alert_schedule([
-        FreightSchedule(**{
-            "scheduleid": str(s["scheduleid"]),
-            "freighterid": str(s["freighterid"]),
-            "departurecity": str(s["departurecity"]),
-            "departurelat": float(s["departurelat"]),
-            "departurelng": float(s["departurelng"]),
-            "arrivalcity": str(s["arrivalcity"]),
-            "arrivallat": float(s["arrivallat"]),
-            "arrivallng": float(s["arrivallng"]),
-            "departuredate": str(s["departuredate"]),
-            "arrivaldate": str(s["arrivaldate"]),
-            "maxloadkg": float(s["maxloadkg"]),
-            "availablekg": float(s["availablekg"]),
-            "status": str(s.get("status", "Available"))  # Default status to "Available"
-        }) for s in schedules
-    ])
-
-
-    return updated_schedule[0]
 
 # ==============================
 # ✅ Shipment Requests
@@ -307,10 +330,10 @@ async def post_shipment_request(request: Request):
     conn = await connect_db()
 
     new_request = await conn.fetch(
-        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         body["clientid"], body["origincity"], body["originlat"], body["originlng"],
         body["destinationcity"], body["destinationlat"], body["destinationlng"],
-        body["weightkg"], body["specialhandling"]
+        body["weightkg"], body["specialhandling"], body["status"]
     )
 
     requests = await conn.fetch("""SELECT * FROM shipmentrequests""")

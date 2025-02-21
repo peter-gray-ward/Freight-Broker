@@ -23,18 +23,18 @@ class User(BaseModel):
         return False
 
 class FreightSchedule(BaseModel):
-    scheduleid: str
-    freighterid: str
-    departurecity: str
-    departurelat: float
-    departurelng: float
-    arrivalcity: str
-    arrivallat: float
-    arrivallng: float
-    departuredate: str
-    arrivaldate: str
-    maxloadkg: float
-    availablekg: float
+    scheduleid: str | None
+    freighterid: str | None
+    departurecity: str | None
+    departurelat: float | None
+    departurelng: float | None
+    arrivalcity: str | None
+    arrivallat: float | None
+    arrivallng: float | None
+    departuredate: str | None
+    arrivaldate: str | None
+    maxloadkg: float | None
+    availablekg: float | None
     status: str = "Available"
 
     def __hash__(self):
@@ -46,19 +46,19 @@ class FreightSchedule(BaseModel):
         return False
 
 class ShipmentRequest(BaseModel):
-    requestid: str
-    clientid: str
-    origincity: str
-    originlat: float
-    originlng: float
-    destinationcity: str
-    destinationlat: float
-    destinationlng: float
-    weightkg: float
-    specialhandling: str
-    status: str = "Pending"
-    createdat: str
-    lastupdated: str
+    requestid: str | None
+    clientid: str | None
+    origincity: str | None
+    originlat: float | None
+    originlng: float | None
+    destinationcity: str | None
+    destinationlat: float | None
+    destinationlng: float | None
+    weightkg: float | None
+    specialhandling: str | None
+    status: str | None = "Pending"
+    createdat: str | None
+    lastupdated: str | None
 
     def __hash__(self):
         return hash(self.requestid)

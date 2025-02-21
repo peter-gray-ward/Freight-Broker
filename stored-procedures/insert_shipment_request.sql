@@ -7,7 +7,8 @@ CREATE OR REPLACE FUNCTION insert_shipment_request(
     p_destination_lat DECIMAL(9,6),
     p_destination_lng DECIMAL(9,6),
     p_weight_kg DECIMAL(10,2),
-    p_special_handling VARCHAR
+    p_special_handling VARCHAR,
+    p_status VARCHAR
 ) RETURNS TABLE (
     requestid UUID,
     clientid UUID,
@@ -32,7 +33,7 @@ BEGIN
     ) VALUES (
         p_client_id, p_origin_city, p_origin_lat, p_origin_lng, 
         p_destination_city, p_destination_lat, p_destination_lng, 
-        p_weight_kg, p_special_handling, 'Pending'
+        p_weight_kg, p_special_handling, p_status
     )
     RETURNING 
         shipmentrequests.RequestID, shipmentrequests.ClientID, shipmentrequests.OriginCity, shipmentrequests.OriginLat, shipmentrequests.OriginLng, shipmentrequests.DestinationCity, shipmentrequests.DestinationLat, shipmentrequests.DestinationLng, shipmentrequests.

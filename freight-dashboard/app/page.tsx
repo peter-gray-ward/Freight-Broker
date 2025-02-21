@@ -21,7 +21,7 @@ export default function Dashboard() {
   if (error) return <p>❌ Failed to log in: {error.message}</p>;
 
   let au = activeUsers.length ? activeUsers : activeUsersInitial;
-  au = au.map(u => ({ name: u.name, role: u.role }))
+  au = au.length ? au.map(u => ({ name: u.name, role: u.role })) : []
 
   let su = shipmentUpdates.length ? shipmentUpdates : shipments;
 
@@ -46,7 +46,7 @@ export default function Dashboard() {
 
       <div id="bottom" className="h-2/5 w-full">
         <section id="schedules" className="h-full w-1/2">
-          <h2 className="w-1/2 text-xl font-semibold mt-4">🕒 Schedules</h2>
+          <h2 className="w-1/2 text-xl font-semibold mt-4">🕒 Schedules ({fu ? fu.length : 0})</h2>
           {DataTable(fu)}
         </section>
         <section id="shipments" className="h-full w-1/2">
