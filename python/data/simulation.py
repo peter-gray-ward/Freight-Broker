@@ -32,6 +32,14 @@ CITIES = [
     ("Denver", 39.739236, -104.990251),
     ("Washington", 38.907192, -77.036871)
 ]
+
+ADMIN = {
+    "name": "Peter",
+    "email": "peterward.pgw@gmail.com",
+    "password": "enter",
+    "role": "Admin"
+}
+
 FREIGHTERS = []
 
 for i in range(20):
@@ -97,20 +105,6 @@ async def get_access_token(session, email, password, name, role):
     return None
 
 
-async def setup_users():
-    async with aiohttp.ClientSession() as session:
-        # Register freighters
-        for freighter in FREIGHTERS:
-            freighter["userid"], freighter["name"], freighter["email"], freighter["role"] = await get_access_token(
-                session, freighter["email"], freighter["password"], freighter["name"], "Freighter"
-            )
-
-        # Register suppliers
-        for supplier in SUPPLIERS:
-            supplier["userid"], supplier["name"], supplier["email"], supplier["role"] = await get_access_token(
-                session, supplier["email"], supplier["password"], supplier["name"], "Client"
-            )
-
 async def simulate(session, user, resp):
     data = await resp.json()
     ACTIVE_SESSIONS[user["userid"]] = resp.cookies.get("fb_access_token").value
@@ -123,26 +117,24 @@ async def simulate(session, user, resp):
     await asyncio.sleep(day_length)
 
 
-async def handle_user_session(user):
+async def handle_user_session(session, user):
     await asyncio.sleep(random.randint(int(day_length / 10), day_length))  # Random start time in the "day"   
 
-    async with aiohttp.ClientSession() as session:
-        # Log in user
-        async with session.post(f"{BASE_URL}/users/login", json={
-            "name": user["name"], "email": user["email"], "password": user["password"]
-        }) as resp:
-            if resp.status == 200:
-                print(f"🔓 {user['name']} logged in.")
-                await simulate(session, user, resp)
-                await logout(session, user)
-            else:
-                async with session.post(f"{BASE_URL}/users/register", json={
-                    "userid": str(user["userid"]), "name": user["name"], "email": user["email"], "password": user["password"], "role": user["role"]
-                }) as resp:
-                    if resp.status == 200:
-                        print(f"🔓 {user['name']} registered.")
-                        await simulate(session, user, resp)
-                        await logout(session, user)
+    async with session.post(f"{BASE_URL}/users/login", json={
+        "name": user["name"], "email": user["email"], "password": user["password"]
+    }) as resp:
+        if resp.status == 200:
+            print(f"🔓 {user['name']} logged in.")
+            await simulate(session, user, resp)
+            await logout(session, user)
+        else:
+            async with session.post(f"{BASE_URL}/users/register", json={
+                "userid": str(user["userid"]), "name": user["name"], "email": user["email"], "password": user["password"], "role": user["role"]
+            }) as resp:
+                if resp.status == 200:
+                    print(f"🔓 {user['name']} registered.")
+                    await simulate(session, user, resp)
+                    await logout(session, user)
 
 
 async def logout(session, user):
@@ -159,24 +151,26 @@ async def logout(session, user):
         print(f"⚠️ Server error during logout ({user['name']}): {e}")
 
 async def manage_sessions():
-    day = 1
-    while True:
-        try:
-            print(f"\n⏳ Day {day} starting...")
-            users = FREIGHTERS + SUPPLIERS
-            random.shuffle(users)
+    async with aiohttp.ClientSession() as session:
+        async with session.post(f"{BASE_URL}/users/register", json=ADMIN) as resp:
+            day = 1
+            while True:
+                try:
+                    print(f"\n⏳ Day {day} starting...")
+                    users = FREIGHTERS + SUPPLIERS
+                    random.shuffle(users)
 
-            tasks = [asyncio.create_task(handle_user_session(user)) for user in users]
-            await asyncio.gather(*tasks) 
+                    tasks = [asyncio.create_task(handle_user_session(session, user)) for user in users]
+                    await asyncio.gather(*tasks) 
 
-            print(f"\n🔄 Day {day} complete. Waiting for next cycle...\n")
-            day += 1
+                    print(f"\n🔄 Day {day} complete. Waiting for next cycle...\n")
+                    day += 1
 
-        except Exception as e:
-            print(f"❌ ERROR in manage_sessions() on Day {day}: {e}")
-            traceback.print_exc()
+                except Exception as e:
+                    print(f"❌ ERROR in manage_sessions() on Day {day}: {e}")
+                    traceback.print_exc()
 
-        await asyncio.sleep(1)  # Simulate next "day" cycle
+                await asyncio.sleep(1)  # Simulate next "day" cycle
 
 
 async def generate_shipment(supplier):
@@ -202,7 +196,9 @@ async def generate_shipment(supplier):
     async with aiohttp.ClientSession() as session:
         async with session.post(f"{BASE_URL}/shipments/requests", json=shipment_data) as resp:
             if resp.status == 200:
-                print(f"📦 Shipment created: {supplier['name']}")
+                data = await resp.json()
+                if data:
+                    print(f"📦 Shipment created: {supplier['name']}")
             else:
                 print(f"❌ Failed shipment {supplier['name']}: {await resp.text()}")
 
@@ -216,7 +212,9 @@ async def update_freighter_schedule(user):
         async with aiohttp.ClientSession() as session:
             async with session.post(f"{BASE_URL}/freighters/schedules", json=freighter) as resp:
                 if resp.status == 200:
-                    print(f"🕒 Schedule Updated: {freighter['name']}")
+                    data = await resp.json()
+                    if data:
+                        print(f"🕒 Schedule Updated: {freighter['name']}")
                 else:
                     print(f"❌ Failed schedule update {freighter['name']}: {await resp.text()}")
     else:

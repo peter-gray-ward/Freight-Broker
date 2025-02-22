@@ -1,1 +1,1 @@
-python -m uvicorn index:app --reload
+python -m uvicorn index:app --reload --log-level warning

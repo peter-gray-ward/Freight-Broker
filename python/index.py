@@ -73,7 +73,7 @@ async def alert_user_connect(user, which):
     print("alert user connect ---- ", which,  user)
     if which == 'login':
         active_users.add(user)
-    else:
+    elif user in active_users:
         active_users.remove(user)
 
     message = json.dumps({ "type": "user_" + which, "payload": user.dict() })
@@ -230,7 +230,7 @@ async def login(request: Request, response: Response):
 async def logout(request: Request):
     user = verify_token(request)
 
-    # print('/users/logout', user)
+    print('/users/logout', user)
 
     await alert_user_connect(User(**user), 'logout')
 
@@ -248,12 +248,12 @@ def get_active_users(request: Request):
 # ✅ Freighter Schedules
 # ==============================
 
+fd = dict()
+
 @app.post("/freighters/schedules")
 async def post_freighter_schedule(request: Request):
     body = await request.json()
     conn = await connect_db()
-
-    print(body)
 
     departuredate = datetime.strptime(body["departuredate"], "%Y-%m-%d %H:%M:%S.%f") if body["departuredate"] else None
     arrivaldate = datetime.strptime(body["arrivaldate"], "%Y-%m-%d %H:%M:%S.%f") if body["arrivaldate"] else None
@@ -270,7 +270,17 @@ async def post_freighter_schedule(request: Request):
         freighterid
     )
 
+    if not len(current_departure):
+        current_departure = None
+    else:
+        current_departure = current_departure[0]
+
     if not current_departure or current_departure["departurelat"] != departurelat or current_departure["departurelng"] != departurelng:
+
+        if body["freighterid"] not in fd:
+            fd[body["freighterid"]] = body["departurelat"]
+        else:
+            raise Exception("...")
 
         new_schedule = await conn.fetch(
             "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",

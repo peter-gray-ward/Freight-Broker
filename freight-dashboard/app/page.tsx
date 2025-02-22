@@ -25,7 +25,7 @@ export default function Dashboard() {
 
   let su = shipmentUpdates.length ? shipmentUpdates : shipments;
 
-  let fu = freighterUpdates.length ? freighterUpdates : schedules;
+  let fu = freighterUpdates.length ? freighterUpdates : (schedules || []);
 
   return (
     <main id="dashboard" className="p-6 w-full">
@@ -35,7 +35,7 @@ export default function Dashboard() {
         </section>
 
         <section id="map" className="w-3/5 h-full">
-          <FreighterMap />
+          <FreighterMap freighters={fu} shipments={su} />
         </section>
 
         <section id="users" className="w-1/5 h-full">
