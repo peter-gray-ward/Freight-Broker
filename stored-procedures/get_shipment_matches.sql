@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION get_shipment_matches(p_request_id UUID)
+CREATE OR REPLACE FUNCTION get_shipment_matches()
 RETURNS TABLE (
     match_id UUID,
     schedule_id UUID,
@@ -11,8 +11,7 @@ AS $$
 BEGIN
     RETURN QUERY 
     SELECT 
-        MatchID, ScheduleID, RequestID, MatchedAt, Status
-    FROM public."ShipmentMatches"
-    WHERE RequestID = p_request_id;
+        s.matchid, s.scheduleid, s.requestid, s.matchedat, s.status
+    FROM public."shipmentmatches" s;
 END;
 $$;

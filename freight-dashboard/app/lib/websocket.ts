@@ -12,6 +12,7 @@ export function useWebSocket() {
   const [freighterUpdates, setFreighterUpdates] = useState<any[]>([]);
   const [shipmentUpdates, setShipmentUpdates] = useState<any[]>([]);
   const [activeUsers, setActiveUsers] = useState<any[]>([]);
+  const [matchUpdates, setMatchUpdates] = useState<any[]>([]);
 
   useEffect(() => {
     const ws = new WebSocket(SOCKET_URL);
@@ -35,6 +36,8 @@ export function useWebSocket() {
         case "shipment_update":
           setShipmentUpdates((prev) => message.payload);
           break;
+        case "match_update":
+          setMatchUpdates(prev => message.payload)
         default:
           console.warn("Unknown WebSocket message type:", message.type);
       }
@@ -52,5 +55,5 @@ export function useWebSocket() {
     }
   };
 
-  return { activeUsers, freighterUpdates, shipmentUpdates, sendMessage };
+  return { activeUsers, freighterUpdates, shipmentUpdates, matchUpdates, sendMessage };
 }

@@ -1,37 +1,38 @@
 CREATE OR REPLACE FUNCTION update_freighter_schedule(
-    p_schedule_id UUID,
+    p_freighter_id UUID,
     p_departure_city VARCHAR,
-    p_departure_lat DECIMAL(9,6),
-    p_departure_lng DECIMAL(9,6),
+    p_departure_lat DOUBLE PRECISION,
+    p_departure_lng DOUBLE PRECISION,
     p_arrival_city VARCHAR,
-    p_arrival_lat DECIMAL(9,6),
-    p_arrival_lng DECIMAL(9,6),
+    p_arrival_lat DOUBLE PRECISION,
+    p_arrival_lng DOUBLE PRECISION,
     p_departure_date TIMESTAMP,
     p_arrival_date TIMESTAMP,
     p_max_load_kg DECIMAL(10,2),
     p_available_kg DECIMAL(10,2),
     p_status VARCHAR
 ) RETURNS TABLE (
-    schedule_id UUID,
-    freighter_id UUID,
-    departure_city VARCHAR,
-    departure_lat DECIMAL(9,6),
-    departure_lng DECIMAL(9,6),
-    arrival_city VARCHAR,
-    arrival_lat DECIMAL(9,6),
-    arrival_lng DECIMAL(9,6),
-    departure_date TIMESTAMP,
-    arrival_date TIMESTAMP,
-    max_load_kg DECIMAL(10,2),
-    available_kg DECIMAL(10,2),
+    scheduleid UUID,
+    freighterid UUID,
+    departurecity VARCHAR,
+    departurelat DOUBLE PRECISION,
+    departurelng DOUBLE PRECISION,
+    arrivalcity VARCHAR,
+    arrivallat DOUBLE PRECISION,
+    arrivallng DOUBLE PRECISION,
+    departuredate TIMESTAMP,
+    arrivaldate TIMESTAMP,
+    maxloadkg DECIMAL(10,2),
+    availablekg DECIMAL(10,2),
     status VARCHAR,
-    created_at TIMESTAMP,
-    last_updated TIMESTAMP
+    createdat TIMESTAMP,
+    lastupdated TIMESTAMP
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    UPDATE public."FreighterSchedules"
+    RETURN QUERY
+    UPDATE public."freighterschedules"
     SET 
         DepartureCity = p_departure_city,
         DepartureLat = p_departure_lat,
@@ -45,11 +46,11 @@ BEGIN
         AvailableKg = p_available_kg,
         Status = p_status,
         LastUpdated = NOW()
-    WHERE ScheduleID = p_schedule_id
+    WHERE freighterschedules.FreighterID = p_freighter_id
     RETURNING 
-        ScheduleID, FreighterID, DepartureCity, DepartureLat, DepartureLng,
-        ArrivalCity, ArrivalLat, ArrivalLng, 
-        DepartureDate, ArrivalDate, 
-        MaxLoadKg, AvailableKg, Status, CreatedAt, LastUpdated;
+        freighterschedules.ScheduleID, freighterschedules.FreighterID, freighterschedules.DepartureCity, freighterschedules.DepartureLat, freighterschedules.DepartureLng,
+        freighterschedules.ArrivalCity, freighterschedules.ArrivalLat, freighterschedules.ArrivalLng, 
+        freighterschedules.DepartureDate, freighterschedules.ArrivalDate, 
+        freighterschedules.MaxLoadKg, freighterschedules.AvailableKg, freighterschedules.Status, freighterschedules.CreatedAt, freighterschedules.LastUpdated;
 END;
 $$;

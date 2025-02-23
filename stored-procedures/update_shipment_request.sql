@@ -1,4 +1,4 @@
-CREATE OR REPLACE FUNCTION insert_shipment_request(
+CREATE OR REPLACE FUNCTION update_shipment_request(
     p_request_id UUID,
     p_client_id UUID,
     p_origin_city VARCHAR,
@@ -29,13 +29,20 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY 
-    INSERT INTO public."shipmentrequests" (
-        RequestID, ClientID, OriginCity, OriginLat, OriginLng, DestinationCity, DestinationLat, DestinationLng, WeightKg, SpecialHandling, Status
-    ) VALUES (
-        p_request_id, p_client_id, p_origin_city, p_origin_lat, p_origin_lng, 
-        p_destination_city, p_destination_lat, p_destination_lng, 
-        p_weight_kg, p_special_handling, p_status
-    )
+    UPDATE public."shipmentrequests"
+    SET 
+        ClientID = p_client_id,
+        OriginCity = p_origin_city,
+        OriginLat = p_origin_lat,
+        OriginLng = p_origin_lng,
+        DestinationCity = p_destination_city,
+        DestinationLat = p_destination_lat,
+        DestinationLng = p_destination_lng,
+        WeightKg = p_weight_kg,
+        SpecialHandling = p_special_handling,
+        Status = p_status,
+        LastUpdated = NOW()
+    WHERE shipmentrequests.RequestID = p_request_id
     RETURNING 
         shipmentrequests.RequestID, shipmentrequests.ClientID, shipmentrequests.OriginCity, shipmentrequests.OriginLat, shipmentrequests.OriginLng, shipmentrequests.DestinationCity, shipmentrequests.DestinationLat, shipmentrequests.DestinationLng, shipmentrequests.
         WeightKg, shipmentrequests.SpecialHandling, shipmentrequests.Status, shipmentrequests.CreatedAt, shipmentrequests.LastUpdated;

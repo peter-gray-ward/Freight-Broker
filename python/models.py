@@ -1,6 +1,8 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, validator
 from datetime import datetime
 from typing import List, Optional
+from sqlmodel import SQLModel, Field
+import uuid
 
 class UserRegister(BaseModel):
     name: str
@@ -22,20 +24,21 @@ class User(BaseModel):
             return self.userid == other.userid
         return False
 
-class FreightSchedule(BaseModel):
-    scheduleid: str | None
-    freighterid: str | None
-    departurecity: str | None
-    departurelat: float | None
-    departurelng: float | None
-    arrivalcity: str | None
-    arrivallat: float | None
-    arrivallng: float | None
-    departuredate: str | None
-    arrivaldate: str | None
-    maxloadkg: float | None
-    availablekg: float | None
+class FreighterSchedules(SQLModel, table=True):
+    scheduleid: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    freighterid: Optional[str] = Field(default=None, index=True)
+    departurecity: Optional[str] = Field(default=None, max_length=255)
+    departurelat: Optional[float] = None
+    departurelng: Optional[float] = None
+    arrivalcity: Optional[str] = Field(default=None, max_length=255)
+    arrivallat: Optional[float] = None
+    arrivallng: Optional[float] = None
+    departuredate: Optional[datetime] = None
+    arrivaldate: Optional[datetime] = None
+    maxloadkg: Optional[float] = None
+    availablekg: Optional[float] = None
     status: str = "Available"
+
 
     def __hash__(self):
         return hash(self.scheduleid)
@@ -45,20 +48,22 @@ class FreightSchedule(BaseModel):
             return self.scheduleid == other.scheduleid
         return False
 
-class ShipmentRequest(BaseModel):
-    requestid: str | None
-    clientid: str | None
-    origincity: str | None
-    originlat: float | None
-    originlng: float | None
-    destinationcity: str | None
-    destinationlat: float | None
-    destinationlng: float | None
-    weightkg: float | None
-    specialhandling: str | None
-    status: str | None = "Pending"
-    createdat: str | None
-    lastupdated: str | None
+
+class ShipmentRequests(SQLModel, table=True):
+    requestid: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    clientid: Optional[str] = Field(default=None, index=True)
+    origincity: Optional[str] = Field(default=None, max_length=255)
+    originlat: Optional[float] = None
+    originlng: Optional[float] = None
+    destinationcity: Optional[str] = Field(default=None, max_length=255)
+    destinationlat: Optional[float] = None
+    destinationlng: Optional[float] = None
+    weightkg: Optional[float] = None
+    specialhandling: Optional[str] = Field(default=None, max_length=255)
+    status: Optional[str] = "Pending"
+    createdat: Optional[datetime] = None
+    lastupdated: Optional[datetime] = None
+
 
     def __hash__(self):
         return hash(self.requestid)
@@ -68,8 +73,8 @@ class ShipmentRequest(BaseModel):
             return self.requestid == other.requestid
         return False
 
-class Order(BaseModel):
-    match_id: str
-    client_id: str
-    freighter_id: str
-    order_status: str = "In Transit"
+class ShipmentMatches(SQLModel, table=True):
+    matchid: Optional[str] = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
+    requestid: Optional[str] = Field(default=None, foreign_key="shipmentrequests.requestid")
+    scheduleid: Optional[str] = Field(default=None, foreign_key="freighterschedules.scheduleid")
+    status: str = "Pending"

@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useLogin, useLoadActiveUsers, useShipments, useSchedules } from "./lib/api";
+import { useLogin, useLoadActiveUsers, useShipments, useSchedules, useMatches } from "./lib/api";
 
 import { useWebSocket } from './lib/websocket';
 
@@ -12,26 +12,31 @@ const FreighterMap = dynamic(() => import("./components/FreighterMap"));
 
 export default function Dashboard() {
   const { data: user, isLoading, error } = useLogin();
-  const { activeUsers, freighterUpdates, shipmentUpdates, sendMessage } = useWebSocket();
+  const { activeUsers, freighterUpdates, shipmentUpdates, sendMessage, matchUpdates } = useWebSocket();
   const { data: activeUsersInitial } = useLoadActiveUsers();
   const { data: shipments } = useShipments()
   const { data: schedules } = useSchedules()
+  const { data: matches } = useMatches();
+
 
   if (isLoading) return <p>🔄 Logging in...</p>;
   if (error) return <p>❌ Failed to log in: {error.message}</p>;
 
-  let au = activeUsers.length ? activeUsers : activeUsersInitial;
+  let au = activeUsers.length ? activeUsers : (activeUsersInitial || []);
   au = au.length ? au.map(u => ({ name: u.name, role: u.role })) : []
 
   let su = shipmentUpdates.length ? shipmentUpdates : shipments;
 
   let fu = freighterUpdates.length ? freighterUpdates : (schedules || []);
 
+  let mu = matchUpdates.length ? matchUpdates : (matches || []);
+
   return (
     <main id="dashboard" className="p-6 w-full">
       <div id="top" className="h-3/5 w-full">
-        <section id="language-stats" className="w-1/4 h-full">
+        <section id="matches" className="w-1/4 h-full">
           <h1 className="text-2xl font-bold">🚛 Freight Broker Dashboard</h1>
+          {DataTable(mu)}
         </section>
 
         <section id="map" className="w-3/5 h-full">

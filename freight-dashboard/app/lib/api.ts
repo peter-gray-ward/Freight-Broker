@@ -63,3 +63,13 @@ export function useSchedules() {
     }
   });
 }
+
+export function useMatches() {
+  return useQuery({
+    queryKey: ["schedules"],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/shipments/matches`);
+      return res.json();
+    }
+  });
+}

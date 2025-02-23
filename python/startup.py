@@ -1,6 +1,10 @@
 import asyncpg
 import os
 import json
+# startup.py
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "env.json"))
 schemas_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "schemas.sql"))
@@ -18,6 +22,21 @@ async def connect_db():
     )
 
 
+DATABASE_URL = (
+    f"postgresql://{env["db"]["username"]}:{env["db"]["password"]}"
+    f"@{env["db"]["host"]}:{env["db"]["port"]}/{env["db"]["database"]}"
+)
+
+print(DATABASE_URL)
+
+sync_engine = create_engine(DATABASE_URL, echo=False)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
+
+def connect_db_sync():
+    return SessionLocal()
+
+
+
 async def load_stored_procedures():
     conn = await connect_db()
 
@@ -26,6 +45,7 @@ async def load_stored_procedures():
             await conn.execute("DELETE FROM users WHERE 1 = 1")
             await conn.execute("DELETE FROM shipmentrequests WHERE 1 = 1")
             await conn.execute("DELETE FROM freighterschedules WHERE 1 = 1")
+            await conn.execute("DELETE FROM shipmentmatches WHERE 1 = 1")
             await conn.execute(schemas_sql.read().strip())
             print(f"Executed: {schemas_path}")
     	except Exception as e:

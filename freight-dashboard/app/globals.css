@@ -41,7 +41,7 @@ h2 {
   display: flex;
 }
 
-#language-stats, #shipments, #users, #schedules {
+#matches, #shipments, #users, #schedules {
   display: flex;
   flex-direction: column;
   
@@ -64,7 +64,7 @@ h2 {
   height: 100%;
 }
 
-#language-stats {
+#matches {
   h2 {
     background: lawngreen;
     color: white;

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, Security
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, WebSocket, WebSocketDisconnect, Security, Query
 from contextlib import asynccontextmanager
 import bcrypt
 import jwt
@@ -6,14 +6,14 @@ import uuid
 from datetime import datetime, timedelta
 import json
 import asyncio
-from typing import Annotated
+from typing import Annotated, Optional
 
-from models import User, UserRegister, FreightSchedule, ShipmentRequest, Order
+from models import User, UserRegister, FreighterSchedules, ShipmentRequests, ShipmentMatches
 from security import create_jwt_token, verify_token, verify_role, hash_password, verify_admin
 from startup import connect_db, load_stored_procedures
-from data.simulation import manage_sessions
+from data.simulation import manage_sessions, move_freighters_toward_destination
 from fastapi.middleware.cors import CORSMiddleware
-
+from service import match_freighters_to_shipments_async
 
 
 print('Python Backend API for "Freight Broker" application')
@@ -25,9 +25,14 @@ active_users = set()
 async def lifespan(app: FastAPI):
     await load_stored_procedures()
 
+    print("LOADED STORED PROCEDURES")
+
     # Start the session management task (runs forever)
     loop = asyncio.get_event_loop()
     loop.create_task(manage_sessions())
+    loop.create_task(match_freighters_to_shipments_async())
+    loop.create_task(move_freighters_toward_destination())
+    loop.create_task(send_match_updates())
 
     yield  # FastAPI continues running while this task runs in the background
 
@@ -48,7 +53,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allow all headers
 )
 
-@app.websocket("/ws")  # ✅ Use raw WebSocket (not `/socket.io`)
+@app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.add(websocket)
@@ -70,7 +75,6 @@ async def websocket_endpoint(websocket: WebSocket):
         active_connections.remove(websocket)
 
 async def alert_user_connect(user, which):
-    print("alert user connect ---- ", which,  user)
     if which == 'login':
         active_users.add(user)
     elif user in active_users:
@@ -83,8 +87,17 @@ async def alert_user_connect(user, which):
         except Exception as e:
             print(f"Failed to send message {e}")
 
+
 async def alert_shipment(shipments):
-    shipments = list(map(lambda s: s.dict(), shipments))
+    shipments = [
+        {
+            **s.dict(),
+            "createdat": str(s.createdat),
+            "lastupdated": str(s.lastupdated),
+        }
+        for s in shipments
+    ]
+
     message = json.dumps({ "type": "shipment_update", "payload": shipments })
     for connection in active_connections:
         try:
@@ -93,13 +106,39 @@ async def alert_shipment(shipments):
             print(f"Failed to send message {e}")
 
 async def alert_schedule(schedules):
-    schedules = list(map(lambda s: s.dict(), schedules))
+    schedules = [
+        {
+            **s.dict(),
+            "departurelat": float(s.departurelat),
+            "departurelng": float(s.departurelng),
+            "arrivallat": float(s.arrivallat) if s.arrivallat else "",
+            "arrivallng": float(s.arrivallng) if s.arrivallng else "",
+            "maxloadkg": float(s.maxloadkg),
+            "availablekg": float(s.availablekg)
+        }
+        for s in schedules
+    ]
     message = json.dumps({ "type": "freighter_update", "payload": schedules })
     for connection in active_connections:
         try:
             await connection.send_text(message)
         except Exception as e:
             print(f"Failed to send message {e}")
+
+async def alert_matches(matches):
+    matches = list(map(lambda s: s.dict(), matches))
+    message = json.dumps({ "type": "match_update", "payload": matches })
+    for connection in active_connections:
+        try:
+            await connection.send_text(message)
+        except Exception as e:
+            print(f"Failed to send message {e}")
+
+async def send_match_updates():
+    conn = await connect_db()
+    matches = await conn.fetch("SELECT * FROM get_shipment_matches()")
+    await conn.close()
+    await alert_matches(matches)
 
 register_tokens = dict()
 
@@ -230,8 +269,6 @@ async def login(request: Request, response: Response):
 async def logout(request: Request):
     user = verify_token(request)
 
-    print('/users/logout', user)
-
     await alert_user_connect(User(**user), 'logout')
 
 @app.get("/secure-data-test")
@@ -248,7 +285,6 @@ def get_active_users(request: Request):
 # ✅ Freighter Schedules
 # ==============================
 
-fd = dict()
 
 @app.post("/freighters/schedules")
 async def post_freighter_schedule(request: Request):
@@ -275,38 +311,36 @@ async def post_freighter_schedule(request: Request):
     else:
         current_departure = current_departure[0]
 
-    if not current_departure or current_departure["departurelat"] != departurelat or current_departure["departurelng"] != departurelng:
+    if not current_departure or float(current_departure["departurelat"]) != departurelat or float(current_departure["departurelng"]) != departurelng:
 
-        if body["freighterid"] not in fd:
-            fd[body["freighterid"]] = body["departurelat"]
-        else:
-            raise Exception("...")
+        has_schedule = await conn.fetch("SELECT 1 FROM freighterschedules WHERE freighterid = $1", body["freighterid"])
 
         new_schedule = await conn.fetch(
-            "SELECT * FROM insert_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+            "SELECT * FROM " + ("insert" if len(has_schedule) == 0 else "update") + "_freighter_schedule($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
             body["freighterid"], body["departurecity"], body["departurelat"], body["departurelng"],
             body["arrivalcity"], body["arrivallat"], body["arrivallng"],
             departuredate, arrivaldate, body["maxloadkg"], body["availablekg"], body["status"]
         )
+
 
         schedules = await conn.fetch("""SELECT * FROM freighterschedules""")
 
         await conn.close()
 
         await alert_schedule([
-            FreightSchedule(**{
+            FreighterSchedules(**{
                 "scheduleid": str(s["scheduleid"]),
                 "freighterid": str(s["freighterid"]),
                 "departurecity": s["departurecity"],
-                "departurelat": s["departurelat"],
-                "departurelng": s["departurelng"],
+                "departurelat": float(s["departurelat"]),
+                "departurelng": float(s["departurelng"]),
                 "arrivalcity": s["arrivalcity"],
                 "arrivallat": s["arrivallat"],
                 "arrivallng": s["arrivallng"],
                 "departuredate": s["departuredate"],
                 "arrivaldate": s["arrivaldate"],
-                "maxloadkg": s["maxloadkg"],
-                "availablekg": s["availablekg"],
+                "maxloadkg": float(s["maxloadkg"]),
+                "availablekg": float(s["availablekg"]),
                 "status": s.get("status", "Available")  # Default status to "Available"
             }) for s in schedules
         ])
@@ -326,22 +360,32 @@ async def get_freighter_schedules():
 # ==============================
 
 @app.get("/shipments/requests")
-async def get_shipment_request(request: Request):
+async def get_shipment_request(request_id: Optional[str] = Query(None)):
     conn = await connect_db()
 
-    requests = await conn.fetch("""SELECT * FROM shipmentrequests""")
+    if request_id:
+        requests = await conn.fetch(
+            "SELECT * FROM shipmentrequests WHERE requestid = $1", request_id
+        )
+    else:
+        requests = await conn.fetch("SELECT * FROM shipmentrequests")
 
     await conn.close()
     return requests
+
 
 @app.post("/shipments/requests")
 async def post_shipment_request(request: Request):
     body = await request.json()
     conn = await connect_db()
 
+    requestid = body.get("requestid", uuid.uuid4())
+
+    has_shipment = await conn.fetch("SELECT 1 FROM shipmentrequests WHERE requestid = $1", requestid)
+
     new_request = await conn.fetch(
-        "SELECT * FROM insert_shipment_request($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
-        body["clientid"], body["origincity"], body["originlat"], body["originlng"],
+        "SELECT * FROM " + ("insert" if len(has_shipment) == 0 else "update") + "_shipment_request($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)",
+        requestid, body["clientid"], body["origincity"], body["originlat"], body["originlng"],
         body["destinationcity"], body["destinationlat"], body["destinationlng"],
         body["weightkg"], body["specialhandling"], body["status"]
     )
@@ -352,30 +396,30 @@ async def post_shipment_request(request: Request):
 
 
     await alert_shipment([
-        ShipmentRequest(**{
+        ShipmentRequests(**{
             "requestid": str(s["requestid"]),  # Ensure correct field names
             "clientid": str(s["clientid"]),  # Ensure client_id is correctly mapped
             "origincity": s["origincity"],
-            "originlat": s["originlat"],
-            "originlng": s["originlng"],
+            "originlat": float(s["originlat"]),
+            "originlng": float(s["originlng"]),
             "destinationcity": s["destinationcity"],
-            "destinationlat": s["destinationlat"],
-            "destinationlng": s["destinationlng"],
-            "weightkg": s["weightkg"],
+            "destinationlat": float(s["destinationlat"]),
+            "destinationlng": float(s["destinationlng"]),
+            "weightkg": float(s["weightkg"]),
             "specialhandling": "none",  # Optional field
             "status": s["status"],
-            "createdat": str(s["createdat"]),
-            "lastupdated": str(s["lastupdated"]),
+            "createdat": s["createdat"],
+            "lastupdated": s["lastupdated"],
         }) for s in requests
     ])
 
 
     return new_request[0]
 
-@app.get("/shipments/matches/{request_id}")
-async def get_shipment_matches(request_id: str):
+@app.get("/shipments/matches")
+async def get_shipment_matches():
     conn = await connect_db()
-    matches = await conn.fetch("SELECT * FROM get_shipment_matches($1)", request_id)
+    matches = await conn.fetch("SELECT * FROM shipmentmatches")
     await conn.close()
     return matches
 
